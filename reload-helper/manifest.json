@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "AI Discuss Reload Helper",
+  "version": "1.0.0",
+  "description": "Helper extension to reload only AI Discuss extension",
+  "permissions": [
+    "management",
+    "storage",
+    "notifications"
+  ],
+  "action": {
+    "default_title": "Reload AI Discuss Extension",
+    "default_icon": {
+      "16": "../icons/icon16.png",
+      "32": "../icons/icon32.png",
+      "48": "../icons/icon48.png"
+    }
+  },
+  "options_page": "options.html",
+  "background": {
+    "service_worker": "background.js"
+  }
+}

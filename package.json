@@ -1,0 +1,11 @@
+{
+  "name": "ai-roundtable",
+  "version": "0.1.5",
+  "description": "Development tools for AI Discuss extension",
+  "scripts": {
+    "watch": "node dev-reload.js"
+  },
+  "devDependencies": {
+    "chokidar": "^3.5.3"
+  }
+}

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Extension Reload Helper - Options</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 600px;
+      margin: 40px auto;
+      padding: 20px;
+    }
+    h1 {
+      font-size: 24px;
+      margin-bottom: 20px;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 500;
+    }
+    input {
+      width: 100%;
+      padding: 8px;
+      font-size: 14px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    button {
+      background: #4285f4;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button:hover {
+      background: #3367d6;
+    }
+    .help {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #666;
+    }
+    .success {
+      color: #0f9d58;
+      margin-top: 10px;
+    }
+    .error {
+      color: #ea4335;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Extension Reload Helper</h1>
+  
+  <div class="form-group">
+    <label for="extensionId">Target Extension ID:</label>
+    <input type="text" id="extensionId" placeholder="Enter extension ID (e.g., abcdefghijklmnopqrstuvwxyz123456)">
+    <div class="help">
+      Find this in chrome://extensions/ under your extension name (when Developer mode is enabled)
+    </div>
+  </div>
+
+  <button id="saveBtn">Save</button>
+  
+  <div id="message"></div>
+
+  <script src="options.js"></script>
+</body>
+</html>

@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Panel</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="panel.css">
+</head>
+
+<body>
+  <div class="container">
+
+
+    <!-- Mode Switcher -->
+    <section class="mode-switcher">
+      <button class="mode-btn" id="mode-settings"><i class="fas fa-cog"></i> Settings</button>
+      <button class="mode-btn active" id="mode-normal"><i class="fas fa-paper-plane"></i> Normal</button>
+      <button class="mode-btn" id="mode-discussion"><i class="fas fa-users"></i> Discussion</button>
+    </section>
+
+    <!-- Settings Mode Content -->
+    <div id="settings-mode" class="hidden">
+      <section class="targets">
+        <label class="target-label">
+          <input type="checkbox" id="settings-target-claude" checked>
+          <span class="ai-icon claude-icon"><i class="fas fa-brain"></i></span>
+          <span class="target-name claude">Claude</span>
+          <span class="status" id="settings-status-claude"><i class="fas fa-circle"></i> -</span>
+        </label>
+        <label class="target-label">
+          <input type="checkbox" id="settings-target-chatgpt" checked>
+          <span class="ai-icon chatgpt-icon"><i class="fas fa-bolt"></i></span>
+          <span class="target-name chatgpt">ChatGPT</span>
+          <span class="status" id="settings-status-chatgpt"><i class="fas fa-circle"></i> -</span>
+        </label>
+        <label class="target-label">
+          <input type="checkbox" id="settings-target-gemini" checked>
+          <span class="ai-icon gemini-icon"><i class="fas fa-gem"></i></span>
+          <span class="target-name gemini">Gemini</span>
+          <span class="status" id="settings-status-gemini"><i class="fas fa-circle"></i> -</span>
+        </label>
+      </section>
+    </div>
+
+    <!-- Normal Mode Content -->
+    <div id="normal-mode">
+      <section class="input-section">
+        <div class="feature-section-label">
+          <i class="fas fa-tools"></i> Quick Actions
+        </div>
+        <div class="action-buttons">
+          <select id="action-select" class="action-select">
+            <option value="">Insert action...</option>
+            <option value="evaluate">Evaluate</option>
+            <option value="learn">Learn from</option>
+            <option value="critique">Critique</option>
+            <option value="supplement">Supplement</option>
+            <option value="compare">Compare</option>
+          </select>
+          <button class="shortcut-btn" id="mutual-btn" data-insert="/mutual "
+            title="Mutual Auditing: All AIs review each other"><i class="fas fa-sync-alt"></i>
+            /mutual</button>
+          <button class="shortcut-btn" id="cross-btn" data-insert="/cross "
+            title="Cross-Evaluation: Multiple AIs evaluate one"><i class="fas fa-exchange-alt"></i>
+            /cross</button>
+          <button class="shortcut-btn" id="arrow-btn" data-insert=" <- " title="Separator for cross-eval syntax"><i
+              class="fas fa-arrow-left"></i></button>
+        </div>
+        <div class="feature-section-label">
+          <i class="fas fa-at"></i> Mention AIs (for Targeted Critique)
+        </div>
+        <div class="mention-buttons">
+          <button class="mention-btn claude" data-mention="@Claude" title="Mention Claude for targeted evaluation"><i
+              class="fas fa-brain"></i> Claude</button>
+          <button class="mention-btn chatgpt" data-mention="@ChatGPT" title="Mention ChatGPT for targeted evaluation"><i
+              class="fas fa-bolt"></i> ChatGPT</button>
+          <button class="mention-btn gemini" data-mention="@Gemini" title="Mention Gemini for targeted evaluation"><i
+              class="fas fa-gem"></i> Gemini</button>
+        </div>
+        <textarea id="message-input"
+          placeholder="Enter message...&#10;&#10;Mutual review: /mutual (based on current responses)&#10;One-way: @Claude evaluate @ChatGPT"
+          rows="6"></textarea>
+        <button id="send-btn"><i class="fas fa-paper-plane"></i> Send</button>
+      </section>
+
+      <section class="help">
+        <details>
+          <summary><i class="fas fa-question-circle"></i> Command Help</summary>
+          <p class="help-subtitle">Mutual Review /mutual (Recommended)</p>
+          <ul>
+            <li><code>/mutual</code><br><small>Let all selected AIs review each other's current responses</small></li>
+            <li><code>/mutual focus on pros and cons</code><br><small>Can add custom evaluation prompt</small></li>
+          </ul>
+          <p class="help-subtitle">One-way Reference</p>
+          <ul>
+            <li><code>@Claude evaluate @ChatGPT</code></li>
+            <li><code>/cross @Claude @Gemini <- @ChatGPT</code></li>
+          </ul>
+        </details>
+      </section>
+    </div><!-- end normal-mode -->
+
+    <!-- Discussion Mode Content -->
+    <div id="discussion-mode" class="hidden">
+      <section class="discussion-setup" id="discussion-setup">
+        <h3><i class="fas fa-play-circle"></i> Start Discussion</h3>
+        <div class="participant-select">
+          <label><i class="fas fa-user-friends"></i> Participants:</label>
+          <div class="participant-options">
+            <label class="participant-option">
+              <input type="checkbox" name="participant" value="claude" checked>
+              <span class="target-name claude">Claude</span>
+            </label>
+            <label class="participant-option">
+              <input type="checkbox" name="participant" value="chatgpt" checked>
+              <span class="target-name chatgpt">ChatGPT</span>
+            </label>
+            <label class="participant-option">
+              <input type="checkbox" name="participant" value="gemini">
+              <span class="target-name gemini">Gemini</span>
+            </label>
+          </div>
+          <p class="hint">Please select 2 participants</p>
+        </div>
+        <textarea id="discussion-topic"
+          placeholder="Enter discussion topic...&#10;&#10;Example: What are the pros and cons of microservices architecture vs monolithic architecture?"
+          rows="4"></textarea>
+        <button id="start-discussion-btn"><i class="fas fa-rocket"></i> Start Discussion</button>
+      </section>
+
+      <section class="discussion-active hidden" id="discussion-active">
+        <div class="discussion-header">
+          <div class="discussion-info">
+            <span class="round-badge" id="round-badge">Round 1</span>
+            <span class="participants-badge" id="participants-badge">Claude vs ChatGPT</span>
+          </div>
+          <button class="end-btn" id="end-discussion-btn"><i class="fas fa-stop-circle"></i> End</button>
+        </div>
+        <div class="discussion-topic-display" id="topic-display"></div>
+        <div class="discussion-status" id="discussion-status">
+          Waiting for initial responses...
+        </div>
+        <div class="discussion-interject">
+          <label><i class="fas fa-hand-paper"></i> Interject (sends to both participants)</label>
+          <textarea id="interject-input" placeholder="Enter what you want to say to both participants..."></textarea>
+          <div class="interject-actions">
+            <button id="interject-btn"><i class="fas fa-broadcast-tower"></i> Send to Both</button>
+          </div>
+        </div>
+        <div class="discussion-controls">
+          <button id="next-round-btn" disabled><i class="fas fa-forward"></i> Next Round</button>
+          <button id="generate-summary-btn" disabled><i class="fas fa-file-alt"></i> Summarize</button>
+          <button id="show-discussion-btn" disabled><i class="fas fa-external-link-alt"></i> Show Discussion</button>
+        </div>
+      </section>
+
+      <section class="discussion-summary hidden" id="discussion-summary">
+        <h3><i class="fas fa-clipboard-list"></i> Discussion Summary</h3>
+        <div id="summary-content"></div>
+        <button id="new-discussion-btn"><i class="fas fa-plus-circle"></i> New Discussion</button>
+      </section>
+    </div><!-- end discussion-mode -->
+
+    <section class="log">
+      <details>
+        <summary><i class="fas fa-history"></i> Activity Log</summary>
+        <div id="log-container"></div>
+      </details>
+    </section>
+
+
+  </div>
+
+  <script src="panel.js"></script>
+</body>
+
+</html>
