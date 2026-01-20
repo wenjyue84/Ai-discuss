@@ -1,6 +1,6 @@
 // AI Panel - Side Panel Controller
 
-const AI_TYPES = ['claude', 'chatgpt', 'gemini', 'perplexity'];
+const AI_TYPES = ['claude', 'chatgpt', 'gemini'];
 
 // Cross-reference action keywords (inserted into message)
 const CROSS_REF_ACTIONS = {
@@ -20,8 +20,7 @@ const logContainer = document.getElementById('log-container');
 const connectedTabs = {
   claude: null,
   chatgpt: null,
-  gemini: null,
-  perplexity: null
+  gemini: null
 };
 
 // Discussion Mode State
@@ -33,9 +32,7 @@ let discussionState = {
   history: [],  // [{round, ai, type: 'initial'|'evaluation'|'response', content, evaluationTarget?}]
   pendingResponses: new Set(),  // AIs we're waiting for
   roundType: null,  // 'initial', 'cross-eval', 'counter'
-  pendingEvaluations: null,  // Map<aiType, {evaluated: Set<aiType>, remaining: Array<aiType>}> for 3-participant sequential evaluations
-  responseTimeouts: new Map(),  // Map<aiType, {startTime, timeoutId, attempt}> - track when each AI was sent a message
-  failedAIs: new Set()  // AIs that have timed out or failed
+  pendingEvaluations: null  // Map<aiType, {evaluated: Set<aiType>, remaining: Array<aiType>}> for 3-participant sequential evaluations
 };
 
 
@@ -157,7 +154,6 @@ function getAITypeFromUrl(url) {
   if (url.includes('claude.ai')) return 'claude';
   if (url.includes('chat.openai.com') || url.includes('chatgpt.com')) return 'chatgpt';
   if (url.includes('gemini.google.com')) return 'gemini';
-  if (url.includes('perplexity.ai')) return 'perplexity';
   return null;
 }
 
@@ -260,7 +256,7 @@ function parseMessage(message) {
     const afterArrow = message.substring(arrowIndex + 2).trim();  // Skip "<-"
 
     // Extract targets (before arrow)
-    const mentionPattern = /@(claude|chatgpt|gemini|perplexity)/gi;
+    const mentionPattern = /@(claude|chatgpt|gemini)/gi;
     const targetMatches = [...beforeArrow.matchAll(mentionPattern)];
     const targetAIs = [...new Set(targetMatches.map(m => m[1].toLowerCase()))];
 
@@ -290,7 +286,7 @@ function parseMessage(message) {
   }
 
   // Pattern-based detection for @ mentions
-  const mentionPattern = /@(claude|chatgpt|gemini|perplexity)/gi;
+  const mentionPattern = /@(claude|chatgpt|gemini)/gi;
   const matches = [...message.matchAll(mentionPattern)];
   const mentions = [...new Set(matches.map(m => m[1].toLowerCase()))];
 
@@ -434,10 +430,6 @@ async function sendToAI(aiType, message) {
       (response) => {
         if (response?.success) {
           log(`Sent to ${aiType}`, 'success');
-          // Track when message was sent for timeout detection (only in discussion mode)
-          if (discussionState.active) {
-            startTimeoutTracking(aiType);
-          }
         } else {
           log(`Failed to send to ${aiType}: ${response?.error || 'Unknown error'}`, 'error');
         }
@@ -604,8 +596,6 @@ async function startDiscussion() {
   // Send topic to all selected AIs
   for (const ai of selected) {
     await sendToAI(ai, `Please share your thoughts on the following topic:\n\n${topic}`);
-    // Track when message was sent for timeout detection
-    startTimeoutTracking(ai);
   }
 
   // Start periodic check for responses (backup in case mutation observer fails)
@@ -624,11 +614,6 @@ function startResponsePolling() {
     if (!discussionState.active || discussionState.pendingResponses.size === 0) {
       clearInterval(responsePollingInterval);
       responsePollingInterval = null;
-      // Clear timeout warnings when polling stops
-      const warningsContainer = document.getElementById('timeout-warnings');
-      if (warningsContainer) {
-        warningsContainer.style.display = 'none';
-      }
       return;
     }
 
@@ -636,12 +621,6 @@ function startResponsePolling() {
     const minContentLength = 50; // Minimum content length to accept as response
     for (const aiType of discussionState.pendingResponses) {
       try {
-        // Check for timeout (fault detection)
-        checkForTimeout(aiType);
-        
-        // Update timeout warnings UI periodically
-        updateTimeoutWarningsUI();
-
         const response = await getLatestResponse(aiType);
         if (response && response.trim().length > 0) {
           // Don't process very short responses - likely still streaming
@@ -658,8 +637,6 @@ function startResponsePolling() {
           
           if (!alreadyRecorded) {
             log(`[Poll] Found ${aiType} response via polling`, 'success');
-            // Clear timeout tracking since we got a response
-            clearTimeoutTracking(aiType);
             // Use handleDiscussionResponse which will verify completion
             handleDiscussionResponse(aiType, response);
           }
@@ -672,10 +649,6 @@ function startResponsePolling() {
 }
 
 async function verifyResponseComplete(aiType, initialContent) {
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/94790163-00e0-42e5-b5ec-318ce51d4c7e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'panel.js:653',message:'verifyResponseComplete entry',data:{aiType,initialContentLength:initialContent?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
-
   // Verify that the response is actually complete (not still streaming)
   // Check multiple times to ensure content is stable
   const checkInterval = 500;
@@ -710,9 +683,6 @@ async function verifyResponseComplete(aiType, initialContent) {
             // Only accept as complete if content meets minimum length requirement
             // This prevents accepting very short responses that might be captured during streaming pauses
             if (currentContent.length >= minContentLength) {
-              // #region agent log
-              fetch('http://127.0.0.1:7243/ingest/94790163-00e0-42e5-b5ec-318ce51d4c7e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'panel.js:688',message:'verifyResponseComplete returning complete',data:{aiType,contentLength:currentContent.length,stableCount,elapsed:Date.now()-startTime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-              // #endregion
               return currentContent; // Response is complete
             } else {
               // Content is stable but too short - likely still streaming, continue waiting
@@ -736,41 +706,23 @@ async function verifyResponseComplete(aiType, initialContent) {
 
   // Timeout - return the last known content only if it meets minimum length
   const finalContent = previousContent || initialContent;
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/94790163-00e0-42e5-b5ec-318ce51d4c7e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'panel.js:711',message:'verifyResponseComplete timeout',data:{aiType,finalLength:finalContent?.length||0,elapsed:Date.now()-startTime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
   return finalContent;
 }
 
 async function handleDiscussionResponse(aiType, content) {
   if (!discussionState.active) return;
 
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/94790163-00e0-42e5-b5ec-318ce51d4c7e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'panel.js:714',message:'handleDiscussionResponse entry',data:{aiType,initialContentLength:content?.length||0,currentRound:discussionState.currentRound,hasPendingEvaluations:!!discussionState.pendingEvaluations},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
-
   // Verify response is complete before marking as done
   const verifiedContent = await verifyResponseComplete(aiType, content);
-
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/94790163-00e0-42e5-b5ec-318ce51d4c7e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'panel.js:718',message:'verifyResponseComplete returned',data:{aiType,verifiedContentLength:verifiedContent?.length||0,initialContentLength:content?.length||0,contentChanged:verifiedContent!==content},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
 
   // Double-check: verify content hasn't grown since verification
   await sleep(1000); // Wait 1 second after verification
   const postVerifyContent = await getLatestResponse(aiType);
   let finalContent = verifiedContent;
   if (postVerifyContent && postVerifyContent.length > verifiedContent.length) {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/94790163-00e0-42e5-b5ec-318ce51d4c7e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'panel.js:724',message:'content grew after verification',data:{aiType,verifiedLength:verifiedContent.length,postVerifyLength:postVerifyContent.length,growth:postVerifyContent.length-verifiedContent.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     // Content is still growing - re-verify
     finalContent = await verifyResponseComplete(aiType, postVerifyContent);
   }
-
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/94790163-00e0-42e5-b5ec-318ce51d4c7e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'panel.js:727',message:'final content determined',data:{aiType,finalContentLength:finalContent?.length||0,verifiedContentLength:verifiedContent?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
 
   // Determine evaluation target for sequential evaluations
   let evaluationTarget = null;
@@ -807,10 +759,6 @@ async function handleDiscussionResponse(aiType, content) {
 
       // Check if there are more evaluations remaining for this participant
       if (evalState.remaining.length > 0) {
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/94790163-00e0-42e5-b5ec-318ce51d4c7e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'panel.js:763',message:'preparing second evaluation',data:{aiType,nextTarget:evalState.remaining[0],evaluatedCount:evalState.evaluated.size,remainingCount:evalState.remaining.length,finalContentLength:finalContent?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-        // #endregion
-
         // Send next evaluation prompt
         const nextTarget = evalState.remaining[0];
         
@@ -821,10 +769,6 @@ async function handleDiscussionResponse(aiType, content) {
         )?.content;
 
         if (targetResponse) {
-          // #region agent log
-          fetch('http://127.0.0.1:7243/ingest/94790163-00e0-42e5-b5ec-318ce51d4c7e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'panel.js:773',message:'about to send second evaluation',data:{aiType,nextTarget,targetResponseLength:targetResponse?.length||0,timeSinceVerification:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-          // #endregion
-
           const msg = `Here is ${capitalize(nextTarget)}'s response to the topic "${discussionState.topic}":
 
 <${nextTarget}_response>
@@ -834,55 +778,7 @@ ${targetResponse}
 Please evaluate this response. What do you agree with? What do you disagree with? What would you add or change?`;
 
           log(`Discussion: ${capitalize(aiType)} evaluating ${capitalize(nextTarget)} (${evalState.evaluated.size + 1}/2)`, 'info');
-          
-          // #region agent log
-          fetch('http://127.0.0.1:7243/ingest/94790163-00e0-42e5-b5ec-318ce51d4c7e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'panel.js:782',message:'before wait for second evaluation',data:{aiType,nextTarget,finalContentLength:finalContent?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-          // #endregion
-          
-          // CRITICAL: Wait longer to ensure first response is fully complete and interface is ready
-          // Based on fix.md, we need to ensure responses are fully answered before sending next prompt
-          // Wait 3 seconds to ensure the message has been fully sent and processed
-          await sleep(3000);
-          
-          // Final verification: check multiple times that content is truly stable
-          let stableChecks = 0;
-          let lastCheckContent = finalContent;
-          for (let i = 0; i < 4; i++) {
-            await sleep(500); // Check every 500ms
-            const checkContent = await getLatestResponse(aiType);
-            if (checkContent && checkContent.length > lastCheckContent.length) {
-              // #region agent log
-              fetch('http://127.0.0.1:7243/ingest/94790163-00e0-42e5-b5ec-318ce51d4c7e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'panel.js:792',message:'content still growing before second evaluation',data:{aiType,nextTarget,lastCheckLength:lastCheckContent.length,checkLength:checkContent.length,growth:checkContent.length-lastCheckContent.length,checkNumber:i+1},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-              // #endregion
-              // Content is still growing - wait for it to complete
-              lastCheckContent = await verifyResponseComplete(aiType, checkContent);
-              // Update history entry with truly final content
-              const lastHistoryEntry = discussionState.history[discussionState.history.length - 1];
-              if (lastHistoryEntry && lastHistoryEntry.ai === aiType && lastHistoryEntry.round === discussionState.currentRound) {
-                lastHistoryEntry.content = lastCheckContent;
-              }
-              stableChecks = 0; // Reset stable count
-              await sleep(2000); // Additional wait after re-verification
-            } else if (checkContent === lastCheckContent) {
-              stableChecks++;
-            } else {
-              lastCheckContent = checkContent || lastCheckContent;
-              stableChecks = 0;
-            }
-          }
-          
-          // Final wait to ensure interface is ready
-          await sleep(2000);
-          
-          // #region agent log
-          fetch('http://127.0.0.1:7243/ingest/94790163-00e0-42e5-b5ec-318ce51d4c7e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'panel.js:800',message:'calling sendToAI for second evaluation',data:{aiType,nextTarget,msgLength:msg.length,timeSinceFirstResponse:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-          // #endregion
-          
-          const sendResult = await sendToAI(aiType, msg);
-          
-          // #region agent log
-          fetch('http://127.0.0.1:7243/ingest/94790163-00e0-42e5-b5ec-318ce51d4c7e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'panel.js:786',message:'sendToAI result for second evaluation',data:{aiType,nextTarget,sendSuccess:sendResult?.success,error:sendResult?.error},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-          // #endregion
+          await sendToAI(aiType, msg);
           
           // Update status message
           const statusParts = [];
@@ -915,21 +811,13 @@ Please evaluate this response. What do you agree with? What do you disagree with
     discussionState.pendingResponses.delete(aiType);
   }
 
-  // Clear timeout tracking since we got a response
-  clearTimeoutTracking(aiType);
-
   log(`Discussion: ${aiType} replied (Round ${discussionState.currentRound})`, 'success');
 
-  // Check if all pending responses received (excluding failed AIs)
-  const activePending = Array.from(discussionState.pendingResponses)
-    .filter(ai => !discussionState.failedAIs.has(ai));
-  
-  if (activePending.length === 0) {
+  // Check if all pending responses received
+  if (discussionState.pendingResponses.size === 0) {
     onRoundComplete();
   } else {
-    const remaining = activePending.map(capitalize).join(', ');
-    const failed = Array.from(discussionState.failedAIs).map(capitalize);
-    
+    const remaining = Array.from(discussionState.pendingResponses).map(capitalize).join(', ');
     if (discussionState.pendingEvaluations) {
       // Update status for sequential evaluation
       const statusParts = [];
@@ -945,24 +833,12 @@ Please evaluate this response. What do you agree with? What do you disagree with
         }
       }
       if (statusParts.length > 0) {
-        let statusText = `Sequential evaluation: ${statusParts.join(', ')}...`;
-        if (failed.length > 0) {
-          statusText += ` (${failed.join(', ')} timed out)`;
-        }
-        updateDiscussionStatus('waiting', statusText);
+        updateDiscussionStatus('waiting', `Sequential evaluation: ${statusParts.join(', ')}...`);
       } else {
-        let statusText = `Waiting for ${remaining}...`;
-        if (failed.length > 0) {
-          statusText += ` (${failed.join(', ')} timed out)`;
-        }
-        updateDiscussionStatus('waiting', statusText);
+        updateDiscussionStatus('waiting', `Waiting for ${remaining}...`);
       }
     } else {
-      let statusText = `Waiting for ${remaining}...`;
-      if (failed.length > 0) {
-        statusText += ` (${failed.join(', ')} timed out)`;
-      }
-      updateDiscussionStatus('waiting', statusText);
+      updateDiscussionStatus('waiting', `Waiting for ${remaining}...`);
     }
   }
 }
@@ -974,9 +850,6 @@ function onRoundComplete() {
   // Clear pendingEvaluations when round completes
   discussionState.pendingEvaluations = null;
 
-  // Clear all timeout tracking
-  clearAllTimeoutTracking();
-
   // Enable next round button
   document.getElementById('next-round-btn').disabled = false;
   document.getElementById('generate-summary-btn').disabled = false;
@@ -986,10 +859,6 @@ function onRoundComplete() {
 async function nextRound() {
   discussionState.currentRound++;
   const participants = discussionState.participants;
-
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/94790163-00e0-42e5-b5ec-318ce51d4c7e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'panel.js:923',message:'nextRound entry',data:{currentRound:discussionState.currentRound,participantsCount:participants.length,participants},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-  // #endregion
 
   // Update UI
   document.getElementById('round-badge').textContent = `Round ${discussionState.currentRound}`;
@@ -1045,10 +914,6 @@ Please evaluate this response. What do you agree with? What do you disagree with
 
     await sendToAI(ai1, msg1);
     await sendToAI(ai2, msg2);
-    
-    // Track timeouts for both AIs
-    startTimeoutTracking(ai1);
-    startTimeoutTracking(ai2);
 
     // Restart response polling for this round
     startResponsePolling();
@@ -1059,10 +924,6 @@ Please evaluate this response. What do you agree with? What do you disagree with
   if (participants.length === 3) {
     const [ai1, ai2, ai3] = participants;
 
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/94790163-00e0-42e5-b5ec-318ce51d4c7e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'panel.js:988',message:'initializing 3-participant sequential evaluation',data:{participants,currentRound:discussionState.currentRound},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
-
     // Initialize pendingEvaluations map
     discussionState.pendingEvaluations = new Map();
     for (const ai of participants) {
@@ -1072,10 +933,6 @@ Please evaluate this response. What do you agree with? What do you disagree with
         remaining: otherParticipants
       });
     }
-
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/94790163-00e0-42e5-b5ec-318ce51d4c7e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'panel.js:1001',message:'pendingEvaluations initialized',data:{pendingEvaluationsSize:discussionState.pendingEvaluations.size,evaluations:Array.from(discussionState.pendingEvaluations.entries()).map(([ai,state])=>({ai,remaining:state.remaining}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
 
     // Set pending responses (all 3 participants)
     discussionState.pendingResponses = new Set(participants);
@@ -1097,8 +954,6 @@ ${targetResponse}
 Please evaluate this response. What do you agree with? What do you disagree with? What would you add or change?`;
 
         await sendToAI(evaluator, msg);
-        // Track timeout for each evaluator
-        startTimeoutTracking(evaluator);
       }
     }
 
@@ -1184,10 +1039,9 @@ ${ai1Response}
 
 async function generateSummary() {
   document.getElementById('generate-summary-btn').disabled = true;
-  
-  const participants = discussionState.participants;
-  const participantsCount = participants.length;
-  updateDiscussionStatus('waiting', `Requesting summaries from ${participantsCount} participant${participantsCount > 1 ? 's' : ''}...`);
+  updateDiscussionStatus('waiting', 'Requesting summaries from both participants...');
+
+  const [ai1, ai2] = discussionState.participants;
 
   // Build conversation history for summary
   let historyText = `Topic: ${discussionState.topic}\n\n`;
@@ -1209,60 +1063,53 @@ async function generateSummary() {
 Discussion history:
 ${historyText}`;
 
-  // Send to ALL participants (not just first 2)
+  // Send to both AIs
   discussionState.roundType = 'summary';
-  discussionState.pendingResponses = new Set(participants);
+  discussionState.pendingResponses = new Set([ai1, ai2]);
 
-  log(`[Summary] Requesting summaries from ${participants.map(capitalize).join(', ')}...`);
-  for (const participant of participants) {
-    await sendToAI(participant, summaryPrompt);
-  }
+  log(`[Summary] Requesting summaries from both participants...`);
+  await sendToAI(ai1, summaryPrompt);
+  await sendToAI(ai2, summaryPrompt);
 
-  // Wait for all responses, then show summary
+  // Wait for both responses, then show summary
   const checkForSummary = setInterval(async () => {
     if (discussionState.pendingResponses.size === 0) {
       clearInterval(checkForSummary);
 
-      // Get summaries from ALL participants
+      // Get both summaries
       const summaries = discussionState.history.filter(h => h.type === 'summary');
-      const summaryMap = {};
-      for (const participant of participants) {
-        summaryMap[participant] = summaries.find(s => s.ai === participant)?.content || '';
-      }
+      const ai1Summary = summaries.find(s => s.ai === ai1)?.content || '';
+      const ai2Summary = summaries.find(s => s.ai === ai2)?.content || '';
 
-      log(`[Summary] Summaries from ${participants.map(capitalize).join(', ')} generated`, 'success');
-      showSummary(summaryMap);
+      log(`[Summary] Summaries from both participants generated`, 'success');
+      showSummary(ai1Summary, ai2Summary);
     }
   }, 500);
 }
 
-function showSummary(summaryMap) {
+function showSummary(ai1Summary, ai2Summary) {
   document.getElementById('discussion-active').classList.add('hidden');
   document.getElementById('discussion-summary').classList.remove('hidden');
 
-  const participants = discussionState.participants;
+  const [ai1, ai2] = discussionState.participants;
 
   // Handle empty summaries
-  const hasAnySummary = Object.values(summaryMap).some(s => s && s.trim().length > 0);
-  if (!hasAnySummary) {
+  if (!ai1Summary && !ai2Summary) {
     log('Warning: Did not receive summary content from AIs', 'error');
   }
 
-  // Build summary HTML - show all summaries
+  // Build summary HTML - show both summaries side by side conceptually
   let html = `<div class="round-summary">
     <h4>Summary Comparison</h4>
-    <div class="summary-comparison">`;
-  
-  for (const participant of participants) {
-    const summary = summaryMap[participant] || '';
-    html += `
+    <div class="summary-comparison">
       <div class="ai-response">
-        <div class="ai-name ${participant}">${capitalize(participant)}'s Summary:</div>
-        <div>${escapeHtml(summary).replace(/\n/g, '<br>')}</div>
-      </div>`;
-  }
-  
-  html += `
+        <div class="ai-name ${ai1}">${capitalize(ai1)}'s Summary:</div>
+        <div>${escapeHtml(ai1Summary).replace(/\n/g, '<br>')}</div>
+      </div>
+      <div class="ai-response">
+        <div class="ai-name ${ai2}">${capitalize(ai2)}'s Summary:</div>
+        <div>${escapeHtml(ai2Summary).replace(/\n/g, '<br>')}</div>
+      </div>
     </div>
   </div>`;
 
@@ -1811,9 +1658,6 @@ function generateDiscussionHTML() {
     .response.gemini {
       border-left-color: #3b82f6;
     }
-    .response.perplexity {
-      border-left-color: #8b5cf6;
-    }
     .ai-name {
       font-weight: 600;
       font-size: 16px;
@@ -1831,9 +1675,6 @@ function generateDiscussionHTML() {
     }
     .ai-name.gemini {
       background: #3b82f6;
-    }
-    .ai-name.perplexity {
-      background: #8b5cf6;
     }
     .response-content {
       padding: 16px;
@@ -2083,9 +1924,7 @@ function resetDiscussion() {
     history: [],
     pendingResponses: new Set(),
     roundType: null,
-    pendingEvaluations: null,
-    responseTimeouts: new Map(),
-    failedAIs: new Set()
+    pendingEvaluations: null
   };
 
   // Stop response polling
@@ -2094,18 +1933,10 @@ function resetDiscussion() {
     responsePollingInterval = null;
   }
 
-  // Clear all timeout tracking
-  clearAllTimeoutTracking();
-
   // Reset UI
   document.getElementById('discussion-setup').classList.remove('hidden');
   document.getElementById('discussion-active').classList.add('hidden');
   document.getElementById('discussion-summary').classList.add('hidden');
-  const warningsContainer = document.getElementById('timeout-warnings');
-  if (warningsContainer) {
-    warningsContainer.style.display = 'none';
-    warningsContainer.innerHTML = '';
-  }
   document.getElementById('discussion-topic').value = 'Latest important news from the past 1 week related to new features of advanced AI tools included but not limited to Gemini, Claude, Chatgpt, Grok, Cursor, Antigravity, NotebookLm, Notion AI, Perplexity, Cursor, Copilot, Deepseek, Qwen, Midjourney, Stable Diffusion, Manus, Llama, Devin, Comet and Replit.';
   document.getElementById('next-round-btn').disabled = true;
   document.getElementById('generate-summary-btn').disabled = true;
@@ -2134,258 +1965,11 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// ============================================
-// Fault Detection, Tolerance, and Fallback
-// ============================================
-
-const TIMEOUT_WARNING_THRESHOLD = 120000; // 2 minutes - show warning
-const TIMEOUT_FAILURE_THRESHOLD = 180000; // 3 minutes - mark as failed
-const MAX_RETRY_ATTEMPTS = 3;
-
-function startTimeoutTracking(aiType) {
-  // Clear any existing timeout for this AI
-  clearTimeoutTracking(aiType);
-  
-  const startTime = Date.now();
-  const timeoutData = {
-    startTime,
-    attempt: 1,
-    warningShown: false,
-    failureShown: false
-  };
-  
-  discussionState.responseTimeouts.set(aiType, timeoutData);
-  
-  // Set up warning timeout (2 minutes)
-  timeoutData.warningTimeoutId = setTimeout(() => {
-    showTimeoutWarning(aiType);
-  }, TIMEOUT_WARNING_THRESHOLD);
-  
-  // Set up failure timeout (3 minutes)
-  timeoutData.failureTimeoutId = setTimeout(() => {
-    handleTimeoutFailure(aiType);
-  }, TIMEOUT_FAILURE_THRESHOLD);
-}
-
-function clearTimeoutTracking(aiType) {
-  const timeoutData = discussionState.responseTimeouts.get(aiType);
-  if (timeoutData) {
-    if (timeoutData.warningTimeoutId) {
-      clearTimeout(timeoutData.warningTimeoutId);
-    }
-    if (timeoutData.failureTimeoutId) {
-      clearTimeout(timeoutData.failureTimeoutId);
-    }
-    discussionState.responseTimeouts.delete(aiType);
-  }
-  // Remove from failed AIs if it was there
-  discussionState.failedAIs.delete(aiType);
-}
-
-function clearAllTimeoutTracking() {
-  for (const aiType of discussionState.responseTimeouts.keys()) {
-    clearTimeoutTracking(aiType);
-  }
-}
-
-function checkForTimeout(aiType) {
-  if (!discussionState.responseTimeouts.has(aiType)) {
-    return; // Not tracking this AI
-  }
-  
-  const timeoutData = discussionState.responseTimeouts.get(aiType);
-  const elapsed = Date.now() - timeoutData.startTime;
-  
-  // Check for warning threshold
-  if (elapsed >= TIMEOUT_WARNING_THRESHOLD && !timeoutData.warningShown) {
-    showTimeoutWarning(aiType);
-    timeoutData.warningShown = true;
-  }
-  
-  // Check for failure threshold
-  if (elapsed >= TIMEOUT_FAILURE_THRESHOLD && !timeoutData.failureShown) {
-    handleTimeoutFailure(aiType);
-    timeoutData.failureShown = true;
-  }
-}
-
-function showTimeoutWarning(aiType) {
-  const elapsed = Math.floor((Date.now() - discussionState.responseTimeouts.get(aiType).startTime) / 1000);
-  const minutes = Math.floor(elapsed / 60);
-  const seconds = elapsed % 60;
-  
-  log(`${capitalize(aiType)}: Taking longer than usual (${minutes}m ${seconds}s). Still waiting...`, 'warning');
-  
-  // Update status to show warning
-  const remaining = Array.from(discussionState.pendingResponses)
-    .filter(ai => !discussionState.failedAIs.has(ai))
-    .map(capitalize);
-  
-  if (remaining.length > 0) {
-    const waitingFor = remaining.join(', ');
-    updateDiscussionStatus('waiting', `Waiting for ${waitingFor}... (${capitalize(aiType)} taking longer than usual)`);
-  }
-}
-
-async function handleTimeoutFailure(aiType) {
-  const timeoutData = discussionState.responseTimeouts.get(aiType);
-  
-  if (!timeoutData) {
-    return;
-  }
-  
-  // Mark as failed
-  discussionState.failedAIs.add(aiType);
-  
-  const elapsed = Math.floor((Date.now() - timeoutData.startTime) / 1000);
-  const minutes = Math.floor(elapsed / 60);
-  
-  log(`${capitalize(aiType)}: Timeout after ${minutes} minutes. Marking as failed.`, 'error');
-  
-  // Try to get partial response if available (fault tolerance)
-  try {
-    const partialResponse = await getLatestResponse(aiType);
-    if (partialResponse && partialResponse.trim().length > 0) {
-      log(`${capitalize(aiType)}: Found partial response (${partialResponse.length} chars), using it`, 'warning');
-      // Use partial response
-      await handleDiscussionResponse(aiType, partialResponse);
-      return; // Exit early if we got a partial response
-    }
-  } catch (err) {
-    // Ignore errors
-  }
-  
-  // Fallback mechanism: Remove from pending and continue without this AI
-  if (discussionState.pendingResponses.has(aiType)) {
-    discussionState.pendingResponses.delete(aiType);
-    log(`${capitalize(aiType)}: Removed from pending responses. Discussion will continue without ${capitalize(aiType)}.`, 'warning');
-    
-    // Update UI
-    updateTimeoutWarningsUI();
-    
-    // Update status
-    const remaining = Array.from(discussionState.pendingResponses)
-      .filter(ai => !discussionState.failedAIs.has(ai))
-      .map(capitalize);
-    
-    if (remaining.length > 0) {
-      updateDiscussionStatus('waiting', `Waiting for ${remaining.join(', ')}... (${capitalize(aiType)} timed out)`);
-    } else {
-      // All remaining AIs have responded or timed out
-      onRoundComplete();
-    }
-  }
-  
-  // Clear timeout tracking
-  clearTimeoutTracking(aiType);
-}
-
-function updateTimeoutWarningsUI() {
-  const warningsContainer = document.getElementById('timeout-warnings');
-  if (!warningsContainer) return;
-  
-  // Clear existing warnings
-  warningsContainer.innerHTML = '';
-  
-  // Check for AIs with warnings or failures
-  const warnings = [];
-  const failures = [];
-  
-  for (const [aiType, timeoutData] of discussionState.responseTimeouts.entries()) {
-    const elapsed = Math.floor((Date.now() - timeoutData.startTime) / 1000);
-    const minutes = Math.floor(elapsed / 60);
-    const seconds = elapsed % 60;
-    
-    if (discussionState.failedAIs.has(aiType)) {
-      failures.push({ aiType, elapsed, minutes, seconds, attempt: timeoutData.attempt });
-    } else if (elapsed >= TIMEOUT_WARNING_THRESHOLD / 1000) {
-      warnings.push({ aiType, elapsed, minutes, seconds });
-    }
-  }
-  
-  if (warnings.length === 0 && failures.length === 0) {
-    warningsContainer.style.display = 'none';
-    return;
-  }
-  
-  warningsContainer.style.display = 'block';
-  
-  // Show warnings
-  for (const warning of warnings) {
-    const warningEl = document.createElement('div');
-    warningEl.className = 'timeout-warning';
-    warningEl.innerHTML = `
-      <i class="fas fa-exclamation-triangle"></i>
-      <span>${capitalize(warning.aiType)} taking longer than usual (${warning.minutes}m ${warning.seconds}s)</span>
-    `;
-    warningsContainer.appendChild(warningEl);
-  }
-  
-  // Show failures with retry option
-  for (const failure of failures) {
-    const failureEl = document.createElement('div');
-    failureEl.className = 'timeout-failure';
-    const canRetry = failure.attempt < MAX_RETRY_ATTEMPTS;
-    failureEl.innerHTML = `
-      <i class="fas fa-times-circle"></i>
-      <span>${capitalize(failure.aiType)} timed out after ${failure.minutes} minutes</span>
-      ${canRetry ? `<button class="retry-btn" data-ai="${failure.aiType}" title="Retry ${capitalize(failure.aiType)}">
-        <i class="fas fa-redo"></i> Retry
-      </button>` : '<span class="no-retry">Max retries reached</span>'}
-    `;
-    warningsContainer.appendChild(failureEl);
-    
-    // Add retry button listener
-    if (canRetry) {
-      const retryBtn = failureEl.querySelector('.retry-btn');
-      retryBtn.addEventListener('click', () => {
-        retryFailedAI(failure.aiType);
-        updateTimeoutWarningsUI();
-      });
-    }
-  }
-}
-
-async function retryFailedAI(aiType) {
-  if (!discussionState.failedAIs.has(aiType)) {
-    return; // Not a failed AI
-  }
-  
-  const timeoutData = discussionState.responseTimeouts.get(aiType);
-  if (!timeoutData || timeoutData.attempt >= MAX_RETRY_ATTEMPTS) {
-    log(`${capitalize(aiType)}: Maximum retry attempts reached. Cannot retry.`, 'error');
-    return;
-  }
-  
-  log(`${capitalize(aiType)}: Retrying (attempt ${timeoutData.attempt + 1}/${MAX_RETRY_ATTEMPTS})...`, 'info');
-  
-  // Remove from failed AIs
-  discussionState.failedAIs.delete(aiType);
-  
-  // Add back to pending
-  discussionState.pendingResponses.add(aiType);
-  
-  // Get the last message sent to this AI from history
-  const lastMessage = discussionState.history
-    .filter(h => h.ai === aiType)
-    .sort((a, b) => b.round - a.round)[0];
-  
-  if (lastMessage) {
-    // Resend the message
-    timeoutData.attempt++;
-    await sendToAI(aiType, `Please continue or complete your response to: ${discussionState.topic}`);
-    startTimeoutTracking(aiType);
-  } else {
-    log(`${capitalize(aiType)}: Could not find previous message to retry`, 'error');
-  }
-}
-
 async function findExistingAITab(aiType) {
   const patterns = {
     claude: ['claude.ai'],
     chatgpt: ['chat.openai.com', 'chatgpt.com'],
-    gemini: ['gemini.google.com'],
-    perplexity: ['perplexity.ai']
+    gemini: ['gemini.google.com']
   };
 
   const urlPatterns = patterns[aiType];
@@ -2414,769 +1998,7 @@ async function createNewChatsForAll() {
     const aiUrls = {
       claude: 'https://claude.ai/chat',
       chatgpt: 'https://chat.openai.com/',
-      gemini: 'https://gemini.google.com/',
-      perplexity: 'https://www.perplexity.ai/'
-    };
-
-    log('Creating new chats for all participants...', 'info');
-
-    // Check for existing tabs and create new chats
-    for (const [aiType, url] of Object.entries(aiUrls)) {
-      try {
-        const existingTab = await findExistingAITab(aiType);
-        
-        if (existingTab) {
-          // Tab exists - update it to create a new chat
-          try {
-            await chrome.tabs.update(existingTab.id, { url: url, active: true });
-            log(`Created new ${capitalize(aiType)} chat in existing tab`, 'success');
-          } catch (err) {
-            log(`Failed to update ${capitalize(aiType)} tab: ${err.message}`, 'error');
-            // Fallback: create new tab if update fails
-            await chrome.tabs.create({ url: url });
-            log(`Opened new ${capitalize(aiType)} chat tab (fallback)`, 'success');
-          }
-        } else {
-          // No existing tab - create new one
-          await chrome.tabs.create({ url: url });
-          log(`Opened new ${capitalize(aiType)} chat tab`, 'success');
-        }
-        
-        // Small delay between opening tabs to avoid overwhelming the browser
-        await sleep(300);
-      } catch (err) {
-        log(`Failed to open ${capitalize(aiType)} chat: ${err.message}`, 'error');
-      }
-    }
-
-    log('All new chats opened successfully', 'success');
-  } catch (err) {
-    log('Error creating new chats: ' + err.message, 'error');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = originalText;
-  }
-}
-
-      border-radius: 12px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-      margin-bottom: 32px;
-    }
-    .header h1 {
-      font-size: 24px;
-      font-weight: 700;
-      margin-bottom: 12px;
-      color: #1e293b;
-    }
-    .header .meta {
-      color: #64748b;
-      font-size: 14px;
-      margin-bottom: 16px;
-      display: flex;
-      gap: 20px;
-      flex-wrap: wrap;
-    }
-    .header .meta-item {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .topic {
-      background: #e8f4f8;
-      padding: 16px 20px;
-      border-left: 4px solid #3b82f6;
-      margin-top: 16px;
-      border-radius: 6px;
-      font-size: 15px;
-      line-height: 1.6;
-      color: #1e293b;
-    }
-    .timeline-container {
-      position: relative;
-      padding-left: 60px;
-    }
-    .timeline-line {
-      position: absolute;
-      left: 20px;
-      top: 0;
-      bottom: 0;
-      width: 2px;
-      background: #e2e8f0;
-    }
-    .round-section {
-      background: white;
-      padding: 24px;
-      border-radius: 12px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-      margin-bottom: 32px;
-      position: relative;
-    }
-    .round-badge-timeline {
-      position: absolute;
-      left: -50px;
-      top: 24px;
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      background: #3b82f6;
-      color: white;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 700;
-      font-size: 14px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    .round-header {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 20px;
-      padding-bottom: 16px;
-      border-bottom: 2px solid #e2e8f0;
-    }
-    .round-number {
-      font-size: 20px;
-      font-weight: 700;
-      color: #1e293b;
-    }
-    .round-type {
-      font-size: 14px;
-      color: #64748b;
-      font-weight: 500;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .response {
-      margin-bottom: 16px;
-      padding: 16px;
-      border-radius: 8px;
-      background: #fafafa;
-      border-left: 4px solid;
-    }
-    .response:last-child {
-      margin-bottom: 0;
-    }
-    .response.claude {
-      border-left-color: #d97706;
-    }
-    .response.chatgpt {
-      border-left-color: #10b981;
-    }
-    .response.gemini {
-      border-left-color: #3b82f6;
-    }
-    .response.perplexity {
-      border-left-color: #8b5cf6;
-    }
-    .ai-name {
-      font-weight: 600;
-      font-size: 16px;
-      margin-bottom: 10px;
-      padding: 8px 12px;
-      border-radius: 6px;
-      display: inline-block;
-      color: white;
-    }
-    .ai-name.claude {
-      background: #d97706;
-    }
-    .ai-name.chatgpt {
-      background: #10b981;
-    }
-    .ai-name.gemini {
-      background: #3b82f6;
-    }
-    .ai-name.perplexity {
-      background: #8b5cf6;
-    }
-    .response-content {
-      padding: 16px;
-      background: white;
-      border-radius: 6px;
-      word-wrap: break-word;
-      font-size: 15px;
-      line-height: 1.7;
-      color: #1e293b;
-    }
-    .response-content p {
-      margin: 0 0 12px 0;
-    }
-    .response-content p:last-child {
-      margin-bottom: 0;
-    }
-    .response-content h1,
-    .response-content h2,
-    .response-content h3 {
-      margin: 20px 0 12px 0;
-      font-weight: 600;
-      line-height: 1.3;
-    }
-    .response-content h1 {
-      font-size: 24px;
-      color: #0f172a;
-    }
-    .response-content h2 {
-      font-size: 20px;
-      color: #1e293b;
-    }
-    .response-content h3 {
-      font-size: 18px;
-      color: #334155;
-    }
-    .response-content ul,
-    .response-content ol {
-      margin: 12px 0;
-      padding-left: 24px;
-    }
-    .response-content li {
-      margin: 6px 0;
-      line-height: 1.6;
-    }
-    .response-content code {
-      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'Courier New', monospace;
-      font-size: 14px;
-    }
-    .response-content .inline-code {
-      background: #f1f5f9;
-      padding: 2px 6px;
-      border-radius: 4px;
-      color: #e11d48;
-      font-size: 14px;
-      border: 1px solid #e2e8f0;
-    }
-    .response-content .code-block {
-      background: #1e293b;
-      color: #e2e8f0;
-      padding: 16px;
-      border-radius: 8px;
-      overflow-x: auto;
-      margin: 16px 0;
-      border: 1px solid #334155;
-    }
-    .response-content .code-block code {
-      color: #e2e8f0;
-      display: block;
-      white-space: pre;
-      font-size: 13px;
-      line-height: 1.5;
-    }
-    .response-content strong {
-      font-weight: 600;
-      color: #0f172a;
-    }
-    .response-content em {
-      font-style: italic;
-    }
-    .response-content a {
-      color: #3b82f6;
-      text-decoration: none;
-      border-bottom: 1px solid #93c5fd;
-      transition: color 0.2s;
-    }
-    .response-content a:hover {
-      color: #2563eb;
-      border-bottom-color: #3b82f6;
-    }
-    .response-content hr {
-      border: none;
-      border-top: 1px solid #e2e8f0;
-      margin: 20px 0;
-    }
-    .response-type {
-      font-size: 12px;
-      color: #94a3b8;
-      margin-top: 8px;
-      font-style: italic;
-    }
-    .summary-section {
-      background: #fff9e6;
-      border: 2px solid #f59e0b;
-      padding: 24px;
-      border-radius: 12px;
-      margin-top: 40px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    }
-    .summary-section h3 {
-      color: #d97706;
-      margin-bottom: 20px;
-      font-size: 20px;
-      font-weight: 700;
-    }
-    .summary-item {
-      margin-bottom: 20px;
-      padding: 16px;
-      background: white;
-      border-radius: 8px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    }
-    .summary-item:last-child {
-      margin-bottom: 0;
-    }
-    @media (max-width: 768px) {
-      body {
-        padding: 20px 10px;
-      }
-      .timeline-container {
-        padding-left: 0;
-      }
-      .timeline-line {
-        display: none;
-      }
-      .round-badge-timeline {
-        display: none;
-      }
-      .header {
-        padding: 20px;
-      }
-      .round-section {
-        padding: 16px;
-      }
-    }
-    @media print {
-      .timeline-line,
-      .round-badge-timeline {
-        display: none;
-      }
-      .round-section {
-        page-break-inside: avoid;
-        margin-bottom: 20px;
-      }
-    }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <h1>AI Discussion Transcript</h1>
-    <div class="meta">
-      <div class="meta-item">
-        <strong>Participants:</strong> ${escapeHtml(participantsText)}
-      </div>
-      <div class="meta-item">
-        <strong>Total Rounds:</strong> ${discussionState.currentRound}
-      </div>
-      <div class="meta-item">
-        <strong>Generated:</strong> ${new Date().toLocaleString()}
-      </div>
-    </div>
-    <div class="topic">
-      <strong>Topic:</strong> ${escapeHtml(discussionState.topic)}
-    </div>
-  </div>
-
-  <div class="timeline-container">
-    <div class="timeline-line"></div>`;
-
-  // Display each round
-  for (let round = 1; round <= discussionState.currentRound; round++) {
-    if (rounds[round] && rounds[round].length > 0) {
-      const roundType = rounds[round][0].type;
-      const typeLabel = getRoundTypeLabel(roundType);
-      const typeIcon = getRoundTypeIcon(roundType);
-      
-      html += `
-    <div class="round-section">
-      <div class="round-badge-timeline">${round}</div>
-      <div class="round-header">
-        <span class="round-number">Round ${round}</span>
-        <span class="round-type">${typeIcon} ${typeLabel}</span>
-      </div>`;
-      
-      for (const entry of rounds[round]) {
-        html += `
-      <div class="response ${entry.ai}">
-        <div class="ai-name ${entry.ai}">${capitalize(entry.ai)}</div>
-        <div class="response-content">${formatMarkdown(entry.content)}</div>
-      </div>`;
-      }
-      
-      html += `
-    </div>`;
-    }
-  }
-
-  html += `
-  </div>`;
-
-  // Display summaries if available
-  if (summaries.length > 0) {
-    html += `
-  <div class="summary-section">
-    <h3>📋 Discussion Summaries</h3>`;
-    
-    for (const summary of summaries) {
-      html += `
-    <div class="summary-item">
-      <div class="ai-name ${summary.ai}">${capitalize(summary.ai)}'s Summary</div>
-      <div class="response-content">${formatMarkdown(summary.content)}</div>
-    </div>`;
-    }
-    
-    html += `
-  </div>`;
-  }
-
-  html += `
-</body>
-</html>`;
-
-  return html;
-}
-
-function endDiscussion() {
-  if (confirm('Are you sure you want to end the discussion? It is recommended to generate a summary first.')) {
-    resetDiscussion();
-  }
-}
-
-function resetDiscussion() {
-  discussionState = {
-    active: false,
-    topic: '',
-    participants: [],
-    currentRound: 0,
-    history: [],
-    pendingResponses: new Set(),
-    roundType: null,
-    pendingEvaluations: null,
-    responseTimeouts: new Map(),
-    failedAIs: new Set()
-  };
-
-  // Stop response polling
-  if (responsePollingInterval) {
-    clearInterval(responsePollingInterval);
-    responsePollingInterval = null;
-  }
-
-  // Clear all timeout tracking
-  clearAllTimeoutTracking();
-
-  // Reset UI
-  document.getElementById('discussion-setup').classList.remove('hidden');
-  document.getElementById('discussion-active').classList.add('hidden');
-  document.getElementById('discussion-summary').classList.add('hidden');
-  const warningsContainer = document.getElementById('timeout-warnings');
-  if (warningsContainer) {
-    warningsContainer.style.display = 'none';
-    warningsContainer.innerHTML = '';
-  }
-  document.getElementById('discussion-topic').value = 'Latest important news from the past 1 week related to new features of advanced AI tools included but not limited to Gemini, Claude, Chatgpt, Grok, Cursor, Antigravity, NotebookLm, Notion AI, Perplexity, Cursor, Copilot, Deepseek, Qwen, Midjourney, Stable Diffusion, Manus, Llama, Devin, Comet and Replit.';
-  document.getElementById('next-round-btn').disabled = true;
-  document.getElementById('generate-summary-btn').disabled = true;
-  document.getElementById('show-discussion-btn').disabled = true;
-
-  log('Discussion ended');
-}
-
-function updateDiscussionStatus(state, text) {
-  const statusEl = document.getElementById('discussion-status');
-  statusEl.textContent = text;
-  statusEl.className = 'discussion-status ' + state;
-  
-  // Also update timeout warnings UI when status changes
-  if (discussionState.active) {
-    updateTimeoutWarningsUI();
-  }
-}
-
-function capitalize(str) {
-  return str.charAt(0).toUpperCase() + str.slice(1);
-}
-
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-// ============================================
-// Fault Detection, Tolerance, and Fallback
-// ============================================
-
-const TIMEOUT_WARNING_THRESHOLD = 120000; // 2 minutes - show warning
-const TIMEOUT_FAILURE_THRESHOLD = 180000; // 3 minutes - mark as failed
-const MAX_RETRY_ATTEMPTS = 3;
-
-function startTimeoutTracking(aiType) {
-  // Clear any existing timeout for this AI
-  clearTimeoutTracking(aiType);
-  
-  const startTime = Date.now();
-  const timeoutData = {
-    startTime,
-    attempt: 1,
-    warningShown: false,
-    failureShown: false
-  };
-  
-  discussionState.responseTimeouts.set(aiType, timeoutData);
-  
-  // Set up warning timeout (2 minutes)
-  timeoutData.warningTimeoutId = setTimeout(() => {
-    showTimeoutWarning(aiType);
-  }, TIMEOUT_WARNING_THRESHOLD);
-  
-  // Set up failure timeout (3 minutes)
-  timeoutData.failureTimeoutId = setTimeout(() => {
-    handleTimeoutFailure(aiType);
-  }, TIMEOUT_FAILURE_THRESHOLD);
-}
-
-function clearTimeoutTracking(aiType) {
-  const timeoutData = discussionState.responseTimeouts.get(aiType);
-  if (timeoutData) {
-    if (timeoutData.warningTimeoutId) {
-      clearTimeout(timeoutData.warningTimeoutId);
-    }
-    if (timeoutData.failureTimeoutId) {
-      clearTimeout(timeoutData.failureTimeoutId);
-    }
-    discussionState.responseTimeouts.delete(aiType);
-  }
-  // Remove from failed AIs if it was there
-  discussionState.failedAIs.delete(aiType);
-}
-
-function clearAllTimeoutTracking() {
-  for (const aiType of discussionState.responseTimeouts.keys()) {
-    clearTimeoutTracking(aiType);
-  }
-}
-
-function checkForTimeout(aiType) {
-  if (!discussionState.responseTimeouts.has(aiType)) {
-    return; // Not tracking this AI
-  }
-  
-  const timeoutData = discussionState.responseTimeouts.get(aiType);
-  const elapsed = Date.now() - timeoutData.startTime;
-  
-  // Check for warning threshold
-  if (elapsed >= TIMEOUT_WARNING_THRESHOLD && !timeoutData.warningShown) {
-    showTimeoutWarning(aiType);
-    timeoutData.warningShown = true;
-  }
-  
-  // Check for failure threshold
-  if (elapsed >= TIMEOUT_FAILURE_THRESHOLD && !timeoutData.failureShown) {
-    handleTimeoutFailure(aiType);
-    timeoutData.failureShown = true;
-  }
-}
-
-function showTimeoutWarning(aiType) {
-  const elapsed = Math.floor((Date.now() - discussionState.responseTimeouts.get(aiType).startTime) / 1000);
-  const minutes = Math.floor(elapsed / 60);
-  const seconds = elapsed % 60;
-  
-  log(`${capitalize(aiType)}: Taking longer than usual (${minutes}m ${seconds}s). Still waiting...`, 'warning');
-  
-  // Update status to show warning
-  const remaining = Array.from(discussionState.pendingResponses)
-    .filter(ai => !discussionState.failedAIs.has(ai))
-    .map(capitalize);
-  
-  if (remaining.length > 0) {
-    const waitingFor = remaining.join(', ');
-    updateDiscussionStatus('waiting', `Waiting for ${waitingFor}... (${capitalize(aiType)} taking longer than usual)`);
-  }
-}
-
-async function handleTimeoutFailure(aiType) {
-  const timeoutData = discussionState.responseTimeouts.get(aiType);
-  
-  if (!timeoutData) {
-    return;
-  }
-  
-  // Mark as failed
-  discussionState.failedAIs.add(aiType);
-  
-  const elapsed = Math.floor((Date.now() - timeoutData.startTime) / 1000);
-  const minutes = Math.floor(elapsed / 60);
-  
-  log(`${capitalize(aiType)}: Timeout after ${minutes} minutes. Marking as failed.`, 'error');
-  
-  // Try to get partial response if available (fault tolerance)
-  try {
-    const partialResponse = await getLatestResponse(aiType);
-    if (partialResponse && partialResponse.trim().length > 0) {
-      log(`${capitalize(aiType)}: Found partial response (${partialResponse.length} chars), using it`, 'warning');
-      // Use partial response
-      await handleDiscussionResponse(aiType, partialResponse);
-      return; // Exit early if we got a partial response
-    }
-  } catch (err) {
-    // Ignore errors
-  }
-  
-  // Fallback mechanism: Remove from pending and continue without this AI
-  if (discussionState.pendingResponses.has(aiType)) {
-    discussionState.pendingResponses.delete(aiType);
-    log(`${capitalize(aiType)}: Removed from pending responses. Discussion will continue without ${capitalize(aiType)}.`, 'warning');
-    
-    // Update UI
-    updateTimeoutWarningsUI();
-    
-    // Update status
-    const remaining = Array.from(discussionState.pendingResponses)
-      .filter(ai => !discussionState.failedAIs.has(ai))
-      .map(capitalize);
-    
-    if (remaining.length > 0) {
-      updateDiscussionStatus('waiting', `Waiting for ${remaining.join(', ')}... (${capitalize(aiType)} timed out)`);
-    } else {
-      // All remaining AIs have responded or timed out
-      onRoundComplete();
-    }
-  }
-  
-  // Clear timeout tracking
-  clearTimeoutTracking(aiType);
-}
-
-function updateTimeoutWarningsUI() {
-  const warningsContainer = document.getElementById('timeout-warnings');
-  if (!warningsContainer) return;
-  
-  // Clear existing warnings
-  warningsContainer.innerHTML = '';
-  
-  // Check for AIs with warnings or failures
-  const warnings = [];
-  const failures = [];
-  
-  for (const [aiType, timeoutData] of discussionState.responseTimeouts.entries()) {
-    const elapsed = Math.floor((Date.now() - timeoutData.startTime) / 1000);
-    const minutes = Math.floor(elapsed / 60);
-    const seconds = elapsed % 60;
-    
-    if (discussionState.failedAIs.has(aiType)) {
-      failures.push({ aiType, elapsed, minutes, seconds, attempt: timeoutData.attempt });
-    } else if (elapsed >= TIMEOUT_WARNING_THRESHOLD / 1000) {
-      warnings.push({ aiType, elapsed, minutes, seconds });
-    }
-  }
-  
-  if (warnings.length === 0 && failures.length === 0) {
-    warningsContainer.style.display = 'none';
-    return;
-  }
-  
-  warningsContainer.style.display = 'block';
-  
-  // Show warnings
-  for (const warning of warnings) {
-    const warningEl = document.createElement('div');
-    warningEl.className = 'timeout-warning';
-    warningEl.innerHTML = `
-      <i class="fas fa-exclamation-triangle"></i>
-      <span>${capitalize(warning.aiType)} taking longer than usual (${warning.minutes}m ${warning.seconds}s)</span>
-    `;
-    warningsContainer.appendChild(warningEl);
-  }
-  
-  // Show failures with retry option
-  for (const failure of failures) {
-    const failureEl = document.createElement('div');
-    failureEl.className = 'timeout-failure';
-    const canRetry = failure.attempt < MAX_RETRY_ATTEMPTS;
-    failureEl.innerHTML = `
-      <i class="fas fa-times-circle"></i>
-      <span>${capitalize(failure.aiType)} timed out after ${failure.minutes} minutes</span>
-      ${canRetry ? `<button class="retry-btn" data-ai="${failure.aiType}" title="Retry ${capitalize(failure.aiType)}">
-        <i class="fas fa-redo"></i> Retry
-      </button>` : '<span class="no-retry">Max retries reached</span>'}
-    `;
-    warningsContainer.appendChild(failureEl);
-    
-    // Add retry button listener
-    if (canRetry) {
-      const retryBtn = failureEl.querySelector('.retry-btn');
-      retryBtn.addEventListener('click', () => {
-        retryFailedAI(failure.aiType);
-        updateTimeoutWarningsUI();
-      });
-    }
-  }
-}
-
-async function retryFailedAI(aiType) {
-  if (!discussionState.failedAIs.has(aiType)) {
-    return; // Not a failed AI
-  }
-  
-  const timeoutData = discussionState.responseTimeouts.get(aiType);
-  if (!timeoutData || timeoutData.attempt >= MAX_RETRY_ATTEMPTS) {
-    log(`${capitalize(aiType)}: Maximum retry attempts reached. Cannot retry.`, 'error');
-    return;
-  }
-  
-  log(`${capitalize(aiType)}: Retrying (attempt ${timeoutData.attempt + 1}/${MAX_RETRY_ATTEMPTS})...`, 'info');
-  
-  // Remove from failed AIs
-  discussionState.failedAIs.delete(aiType);
-  
-  // Add back to pending
-  discussionState.pendingResponses.add(aiType);
-  
-  // Get the last message sent to this AI from history
-  const lastMessage = discussionState.history
-    .filter(h => h.ai === aiType)
-    .sort((a, b) => b.round - a.round)[0];
-  
-  if (lastMessage) {
-    // Resend the message
-    timeoutData.attempt++;
-    await sendToAI(aiType, `Please continue or complete your response to: ${discussionState.topic}`);
-    startTimeoutTracking(aiType);
-  } else {
-    log(`${capitalize(aiType)}: Could not find previous message to retry`, 'error');
-  }
-}
-
-async function findExistingAITab(aiType) {
-  const patterns = {
-    claude: ['claude.ai'],
-    chatgpt: ['chat.openai.com', 'chatgpt.com'],
-    gemini: ['gemini.google.com'],
-    perplexity: ['perplexity.ai']
-  };
-
-  const urlPatterns = patterns[aiType];
-  if (!urlPatterns) return null;
-
-  try {
-    const tabs = await chrome.tabs.query({});
-    for (const tab of tabs) {
-      if (tab.url && urlPatterns.some(pattern => tab.url.includes(pattern))) {
-        return tab;
-      }
-    }
-  } catch (err) {
-    console.error(`Error finding ${aiType} tab:`, err);
-  }
-  return null;
-}
-
-async function createNewChatsForAll() {
-  const btn = document.getElementById('create-chat-btn');
-  const originalText = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Opening chats...';
-
-  try {
-    const aiUrls = {
-      claude: 'https://claude.ai/chat',
-      chatgpt: 'https://chat.openai.com/',
-      gemini: 'https://gemini.google.com/',
-      perplexity: 'https://www.perplexity.ai/'
+      gemini: 'https://gemini.google.com/'
     };
 
     log('Creating new chats for all participants...', 'info');

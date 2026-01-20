@@ -9,17 +9,14 @@
     "activeTab",
     "tabs",
     "scripting",
-    "storage",
-    "webNavigation"
+    "storage"
   ],
 
   "host_permissions": [
     "https://claude.ai/*",
     "https://chat.openai.com/*",
     "https://chatgpt.com/*",
-    "https://gemini.google.com/*",
-    "https://www.perplexity.ai/*",
-    "https://perplexity.ai/*"
+    "https://gemini.google.com/*"
   ],
 
   "side_panel": {
@@ -45,12 +42,6 @@
       "matches": ["https://gemini.google.com/*"],
       "js": ["content/gemini.js"],
       "run_at": "document_idle"
-    },
-    {
-      "matches": ["https://www.perplexity.ai/*", "https://perplexity.ai/*"],
-      "js": ["content/perplexity.js"],
-      "run_at": "document_idle",
-      "all_frames": true
     }
   ],
 

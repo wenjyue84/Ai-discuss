@@ -51,34 +51,6 @@
   setupResponseObserver();
 
   async function injectMessage(text) {
-    const maxRetries = 10;
-    const retryInterval = 500; // 500ms between retries
-    
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        return await attemptInjectMessage(text);
-      } catch (error) {
-        const isRetryableError = error.message.includes('Could not find input field') ||
-                                 error.message.includes('Could not find send button');
-        
-        if (!isRetryableError) {
-          // Non-retryable error, throw immediately
-          throw error;
-        }
-        
-        if (attempt < maxRetries) {
-          console.log(`[AI Panel] ChatGPT injectMessage attempt ${attempt} failed: ${error.message}, retrying in ${retryInterval}ms...`);
-          await sleep(retryInterval);
-        } else {
-          // Last attempt failed
-          console.log(`[AI Panel] ChatGPT injectMessage failed after ${maxRetries} attempts: ${error.message}`);
-          throw error;
-        }
-      }
-    }
-  }
-
-  async function attemptInjectMessage(text) {
     // ChatGPT uses a textarea or contenteditable div
     const inputSelectors = [
       '#prompt-textarea',
