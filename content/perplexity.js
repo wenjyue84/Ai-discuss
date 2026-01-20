@@ -1,9 +1,11 @@
-// AI Panel - ChatGPT Content Script
+// AI Panel - Perplexity Content Script
 
 (function () {
   'use strict';
 
-  const AI_TYPE = 'chatgpt';
+  // Top-level error handler to catch any initialization errors
+  try {
+    const AI_TYPE = 'perplexity';
 
   // Check if extension context is still valid
   function isContextValid() {
@@ -23,21 +25,30 @@
     }
   }
 
-  // Notify background that content script is ready
-  safeSendMessage({ type: 'CONTENT_SCRIPT_READY', aiType: AI_TYPE });
-
-  // Listen for messages from background script
+  // CRITICAL: Set up message listener FIRST before anything else
+  // This ensures PING messages can be received even if other initialization fails
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'PING') {
-      sendResponse({ pong: true });
-      return true;
+      console.log('[AI Panel] Perplexity PING received, responding with pong');
+      console.log('[AI Panel] Perplexity context check:', {
+        hasRuntime: !!chrome.runtime,
+        runtimeId: chrome.runtime?.id,
+        url: window.location.href,
+        frameId: window.frameElement ? 'in-iframe' : 'main-frame'
+      });
+      try {
+        sendResponse({ pong: true });
+      } catch (e) {
+        console.error('[AI Panel] Error sending PING response:', e);
+      }
+      return true; // Keep channel open for async response
     }
 
     if (message.type === 'INJECT_MESSAGE') {
       injectMessage(message.message)
         .then(() => sendResponse({ success: true }))
         .catch(err => sendResponse({ success: false, error: err.message }));
-      return true;
+      return true; // Keep channel open for async response
     }
 
     if (message.type === 'GET_LATEST_RESPONSE') {
@@ -47,8 +58,50 @@
     }
   });
 
+  // Create visible marker to verify script is running
+  try {
+    const marker = document.createElement('div');
+    marker.id = 'ai-panel-perplexity-loaded';
+    marker.style.cssText = 'position:fixed;top:50px;right:10px;background:green;color:white;padding:5px;z-index:999999;font-size:12px;border-radius:4px;';
+    marker.textContent = '✓ Perplexity Script Loaded';
+    document.body.appendChild(marker);
+    setTimeout(() => marker.remove(), 5000);
+  } catch (e) {
+    console.log('[AI Panel] Could not create marker (non-critical):', e);
+  }
+
+  // Now initialize the rest of the script
+  try {
+    console.log('[AI Panel] Perplexity script starting initialization...', {
+      url: window.location.href,
+      hasRuntime: !!chrome.runtime,
+      runtimeId: chrome.runtime?.id,
+      isIframe: !!window.frameElement
+    });
+    
+    // Notify background that content script is ready
+    try {
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/94790163-00e0-42e5-b5ec-318ce51d4c7e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'perplexity.js:50',message:'content script loaded, sending CONTENT_SCRIPT_READY',data:{aiType:AI_TYPE,url:window.location.href,hasRuntime:!!chrome.runtime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+    } catch (e) {
+      console.log('[AI Panel] Debug log failed (non-critical):', e);
+    }
+    
+    const readyResult = safeSendMessage({ type: 'CONTENT_SCRIPT_READY', aiType: AI_TYPE });
+    console.log('[AI Panel] Perplexity content script loaded and ready, CONTENT_SCRIPT_READY sent');
+    console.log('[AI Panel] Message send result:', readyResult);
+  } catch (e) {
+    console.error('[AI Panel] Error during Perplexity content script initialization:', e);
+    console.error('[AI Panel] Error stack:', e.stack);
+  }
+
   // Setup response observer for cross-reference feature
-  setupResponseObserver();
+  try {
+    setupResponseObserver();
+  } catch (e) {
+    console.error('[AI Panel] Error setting up response observer:', e);
+  }
 
   async function injectMessage(text) {
     const maxRetries = 10;
@@ -67,11 +120,11 @@
         }
         
         if (attempt < maxRetries) {
-          console.log(`[AI Panel] ChatGPT injectMessage attempt ${attempt} failed: ${error.message}, retrying in ${retryInterval}ms...`);
+          console.log(`[AI Panel] Perplexity injectMessage attempt ${attempt} failed: ${error.message}, retrying in ${retryInterval}ms...`);
           await sleep(retryInterval);
         } else {
           // Last attempt failed
-          console.log(`[AI Panel] ChatGPT injectMessage failed after ${maxRetries} attempts: ${error.message}`);
+          console.log(`[AI Panel] Perplexity injectMessage failed after ${maxRetries} attempts: ${error.message}`);
           throw error;
         }
       }
@@ -79,19 +132,21 @@
   }
 
   async function attemptInjectMessage(text) {
-    // ChatGPT uses a textarea or contenteditable div
+    // Perplexity uses various input selectors
     const inputSelectors = [
-      '#prompt-textarea',
-      'textarea[data-id="root"]',
-      'div[contenteditable="true"][data-placeholder]',
-      'textarea[placeholder*="Message"]',
-      'textarea'
+      'textarea[placeholder*="Ask anything"]',
+      'textarea[placeholder*="Ask"]',
+      'textarea[aria-label*="prompt"]',
+      'textarea[aria-label*="Ask"]',
+      'div[contenteditable="true"][role="textbox"]',
+      'textarea',
+      'div[contenteditable="true"]'
     ];
 
     let inputEl = null;
     for (const selector of inputSelectors) {
       inputEl = document.querySelector(selector);
-      if (inputEl) break;
+      if (inputEl && isVisible(inputEl)) break;
     }
 
     if (!inputEl) {
@@ -105,14 +160,15 @@
     if (inputEl.tagName === 'TEXTAREA') {
       inputEl.value = text;
       inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+      inputEl.dispatchEvent(new Event('change', { bubbles: true }));
     } else {
       // Contenteditable div
       inputEl.textContent = text;
       inputEl.dispatchEvent(new Event('input', { bubbles: true }));
     }
 
-    // Small delay to let React process
-    await sleep(100);
+    // Small delay to let the UI process
+    await sleep(150);
 
     // Find and click the send button
     const sendButton = findSendButton();
@@ -126,26 +182,33 @@
     sendButton.click();
 
     // Start capturing response after sending
-    console.log('[AI Panel] ChatGPT message sent, starting response capture...');
+    console.log('[AI Panel] Perplexity message sent, starting response capture...');
     waitForStreamingComplete();
 
     return true;
   }
 
   function findSendButton() {
-    // ChatGPT's send button
+    // Perplexity's send button
     const selectors = [
-      'button[data-testid="send-button"]',
-      'button[aria-label="Send prompt"]',
-      'button[aria-label="Send message"]',
-      'form button[type="submit"]',
-      'button svg path[d*="M15.192"]' // Arrow icon path
+      'button[aria-label*="Send"]',
+      'button[aria-label*="Submit"]',
+      'button[type="submit"]',
+      'button svg[viewBox]',
+      'button[data-testid*="send"]',
+      '.send-button',
+      'button:has(svg)'
     ];
 
     for (const selector of selectors) {
-      const el = document.querySelector(selector);
-      if (el) {
-        return el.closest('button') || el;
+      try {
+        const el = document.querySelector(selector);
+        if (el && isVisible(el)) {
+          return el.closest('button') || el;
+        }
+      } catch (e) {
+        // Invalid selector (e.g., :has() not supported), continue
+        continue;
       }
     }
 
@@ -211,14 +274,17 @@
     if (isCapturing) return;
 
     const responseSelectors = [
-      '[data-message-author-role="assistant"]',
-      '.agent-turn',
-      '[class*="assistant"]'
+      '[class*="response"]',
+      '[class*="answer"]',
+      '[class*="assistant"]',
+      '[data-role="assistant"]',
+      '[role="article"]',
+      '[class*="message-content"]'
     ];
 
     for (const selector of responseSelectors) {
       if (node.matches?.(selector) || node.querySelector?.(selector)) {
-        console.log('[AI Panel] ChatGPT detected new response...');
+        console.log('[AI Panel] Perplexity detected new response...');
         waitForStreamingComplete();
         break;
       }
@@ -226,14 +292,11 @@
   }
 
   async function waitForStreamingComplete() {
-    console.log('[AI Panel] ChatGPT waitForStreamingComplete called, isCapturing:', isCapturing);
-
     if (isCapturing) {
-      console.log('[AI Panel] ChatGPT already capturing, skipping...');
+      console.log('[AI Panel] Perplexity already capturing, skipping...');
       return;
     }
     isCapturing = true;
-    console.log('[AI Panel] ChatGPT starting capture loop...');
 
     let previousContent = '';
     let stableCount = 0;
@@ -242,7 +305,6 @@
     const stableThreshold = 4;  // 2 seconds of stable content
 
     const startTime = Date.now();
-    let firstContentTime = null;  // Track when we first see content
 
     try {
       while (Date.now() - startTime < maxWait) {
@@ -253,22 +315,8 @@
 
         await sleep(checkInterval);
 
-        const currentContent = getLatestResponse() || '';
-
-        // Track when content first appears
-        if (currentContent.length > 0 && firstContentTime === null) {
-          firstContentTime = Date.now();
-          console.log('[AI Panel] ChatGPT first content detected, length:', currentContent.length);
-        }
-
-        // Debug: log every 10 seconds
-        const elapsed = Date.now() - startTime;
-        if (elapsed % 10000 < checkInterval) {
-          console.log(`[AI Panel] ChatGPT check: contentLen=${currentContent.length}, stableCount=${stableCount}, elapsed=${Math.round(elapsed / 1000)}s`);
-        }
-
-        // Check if ChatGPT is still streaming
         const isStreaming = checkIfStreaming();
+        const currentContent = getLatestResponse() || '';
 
         // Content is stable when content unchanged and has content
         const contentStable = currentContent === previousContent && currentContent.length > 0;
@@ -289,15 +337,15 @@
             if (stableCount >= stableThreshold) {
               if (currentContent !== lastCapturedContent) {
                 lastCapturedContent = currentContent;
-                console.log('[AI Panel] ChatGPT capturing response, length:', currentContent.length);
+                console.log('[AI Panel] Perplexity capturing response, length:', currentContent.length);
                 safeSendMessage({
                   type: 'RESPONSE_CAPTURED',
                   aiType: AI_TYPE,
                   content: currentContent
                 });
-                console.log('[AI Panel] ChatGPT response captured and sent!');
+                console.log('[AI Panel] Perplexity response captured and sent!');
               } else {
-                console.log('[AI Panel] ChatGPT content same as last capture, skipping');
+                console.log('[AI Panel] Perplexity content same as last capture, skipping');
               }
               return;
             }
@@ -309,49 +357,38 @@
 
         previousContent = currentContent;
       }
-      console.log('[AI Panel] ChatGPT capture timeout after', maxWait / 1000, 'seconds');
+      console.log('[AI Panel] Perplexity capture timeout after', maxWait / 1000, 'seconds');
     } finally {
       isCapturing = false;
-      console.log('[AI Panel] ChatGPT capture loop ended');
+      console.log('[AI Panel] Perplexity capture loop ended');
     }
   }
 
   function checkIfStreaming() {
     // Check for stop button (indicates streaming is active)
-    const stopButton = document.querySelector('button[aria-label*="Stop"], button[aria-label*="stop"], button[data-testid*="stop"]');
+    const stopButton = document.querySelector('button[aria-label*="Stop"], button[aria-label*="stop"]');
     if (stopButton && isVisible(stopButton)) {
       return true;
     }
 
-    // Check for streaming indicators in the last assistant message
-    const lastAssistant = document.querySelector('[data-message-author-role="assistant"]:last-of-type, .agent-turn:last-of-type');
-    if (lastAssistant) {
-      // Check for streaming classes or attributes
-      const hasStreamingClass = lastAssistant.classList.toString().toLowerCase().includes('streaming') ||
-        lastAssistant.classList.toString().toLowerCase().includes('generating');
-      if (hasStreamingClass) {
-        return true;
-      }
-
-      // Check for cursor/typing indicators
-      const hasCursor = lastAssistant.querySelector('.cursor, [class*="cursor"], .typing, [class*="typing"]');
-      if (hasCursor) {
-        return true;
-      }
+    // Check for streaming indicators
+    const hasStreamingClass = document.querySelector('[class*="streaming"], [class*="generating"], [data-streaming="true"]');
+    if (hasStreamingClass) {
+      return true;
     }
 
     return false;
   }
 
   function getLatestResponse() {
-    // Find all assistant messages and get the last one
-    // ChatGPT UI changes frequently, so we try multiple selectors
+    // Find all response containers and get the last one
     const containerSelectors = [
-      '[data-message-author-role="assistant"]',
-      '.agent-turn',
-      '[class*="agent-turn"]',
-      '[data-testid*="conversation-turn"]:has([data-message-author-role="assistant"])',
-      'article[data-testid*="conversation"]'
+      '[class*="response"]',
+      '[class*="answer"]',
+      '[class*="assistant"]',
+      '[data-role="assistant"]',
+      '[role="article"]',
+      '[class*="message-content"]'
     ];
 
     let containers = [];
@@ -360,30 +397,12 @@
         containers = document.querySelectorAll(selector);
         if (containers.length > 0) break;
       } catch (e) {
-        // Invalid selector (e.g., :has() not supported), continue
         continue;
       }
     }
 
     if (containers.length > 0) {
       const lastContainer = containers[containers.length - 1];
-      
-      // Try to find all markdown content within this container
-      const markdownElements = lastContainer.querySelectorAll('.markdown, [class*="markdown"]');
-      
-      if (markdownElements.length > 0) {
-        // Combine all markdown elements to get full content
-        const fullContent = Array.from(markdownElements)
-          .map(el => el.innerText || el.textContent)
-          .filter(text => text && text.trim().length > 0)
-          .join('\n\n');
-        
-        if (fullContent.trim().length > 0) {
-          return fullContent.trim();
-        }
-      }
-      
-      // Fallback: get all text from the container itself
       const containerText = lastContainer.innerText || lastContainer.textContent;
       if (containerText && containerText.trim().length > 0) {
         return containerText.trim();
@@ -399,11 +418,31 @@
   }
 
   function isVisible(el) {
+    if (!el) return false;
     const style = window.getComputedStyle(el);
     return style.display !== 'none' &&
       style.visibility !== 'hidden' &&
       style.opacity !== '0';
   }
 
-  console.log('[AI Panel] ChatGPT content script loaded');
+    console.log('[AI Panel] Perplexity content script loaded');
+  } catch (topLevelError) {
+    // Catch any errors during script initialization
+    console.error('[AI Panel] CRITICAL ERROR in Perplexity content script initialization:', topLevelError);
+    console.error('[AI Panel] Error stack:', topLevelError.stack);
+    
+    // Try to notify background of the error
+    try {
+      if (chrome.runtime && chrome.runtime.id) {
+        chrome.runtime.sendMessage({
+          type: 'CONTENT_SCRIPT_ERROR',
+          aiType: 'perplexity',
+          error: topLevelError.message,
+          stack: topLevelError.stack
+        }).catch(() => {});
+      }
+    } catch (e) {
+      console.error('[AI Panel] Could not send error message:', e);
+    }
+  }
 })();

@@ -46,6 +46,12 @@
           <span class="target-name gemini">Gemini</span>
           <span class="status" id="settings-status-gemini"><i class="fas fa-circle"></i> -</span>
         </label>
+        <label class="target-label">
+          <input type="checkbox" id="settings-target-perplexity" checked>
+          <span class="ai-icon perplexity-icon"><i class="fas fa-search"></i></span>
+          <span class="target-name perplexity">Perplexity</span>
+          <span class="status" id="settings-status-perplexity"><i class="fas fa-circle"></i> -</span>
+        </label>
       </section>
     </div>
 
@@ -83,6 +89,8 @@
               class="fas fa-bolt"></i> ChatGPT</button>
           <button class="mention-btn gemini" data-mention="@Gemini" title="Mention Gemini for targeted evaluation"><i
               class="fas fa-gem"></i> Gemini</button>
+          <button class="mention-btn perplexity" data-mention="@Perplexity" title="Mention Perplexity for targeted evaluation"><i
+              class="fas fa-search"></i> Perplexity</button>
         </div>
         <textarea id="message-input"
           placeholder="Enter message...&#10;&#10;Mutual review: /mutual (based on current responses)&#10;One-way: @Claude evaluate @ChatGPT"
@@ -126,6 +134,10 @@
               <input type="checkbox" name="participant" value="gemini">
               <span class="target-name gemini">Gemini</span>
             </label>
+            <label class="participant-option">
+              <input type="checkbox" name="participant" value="perplexity">
+              <span class="target-name perplexity">Perplexity</span>
+            </label>
           </div>
           <p class="hint">Please select 2 participants</p>
         </div>
@@ -145,6 +157,9 @@
         <div class="discussion-topic-display" id="topic-display"></div>
         <div class="discussion-status" id="discussion-status">
           Waiting for initial responses...
+        </div>
+        <div class="discussion-timeout-warnings" id="timeout-warnings" style="display: none;">
+          <!-- Timeout warnings will be inserted here -->
         </div>
         <div class="discussion-interject">
           <label><i class="fas fa-hand-paper"></i> Interject (sends to both participants)</label>

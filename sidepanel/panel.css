@@ -172,6 +172,10 @@ header .subtitle {
   color: #3b82f6;
 }
 
+.target-name.perplexity {
+  color: #8b5cf6;
+}
+
 .status {
   font-size: 11px;
   padding: 4px 10px;
@@ -351,6 +355,15 @@ header .subtitle {
 .mention-btn.gemini:hover {
   background: rgba(59, 130, 246, 0.15);
   border-color: #3b82f6;
+}
+
+.mention-btn.perplexity {
+  color: #8b5cf6;
+}
+
+.mention-btn.perplexity:hover {
+  background: rgba(139, 92, 246, 0.15);
+  border-color: #8b5cf6;
 }
 
 #message-input {
@@ -930,6 +943,75 @@ header .subtitle {
   color: var(--status-success);
 }
 
+/* Timeout Warnings */
+.discussion-timeout-warnings {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--dark-card);
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.timeout-warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(251, 191, 36, 0.1);
+  border-left: 3px solid #fbbf24;
+  border-radius: 4px;
+  color: #fbbf24;
+  font-size: 12px;
+}
+
+.timeout-warning i {
+  font-size: 14px;
+}
+
+.timeout-failure {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(239, 68, 68, 0.1);
+  border-left: 3px solid #ef4444;
+  border-radius: 4px;
+  color: #ef4444;
+  font-size: 12px;
+  justify-content: space-between;
+}
+
+.timeout-failure i {
+  font-size: 14px;
+}
+
+.timeout-failure .retry-btn {
+  padding: 4px 12px;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: background 0.2s;
+}
+
+.timeout-failure .retry-btn:hover {
+  background: #dc2626;
+}
+
+.timeout-failure .no-retry {
+  font-size: 11px;
+  opacity: 0.7;
+  font-style: italic;
+}
+
 /* Discussion Interject */
 .discussion-interject {
   display: flex;
@@ -1174,6 +1256,10 @@ header .subtitle {
 
 #summary-content .ai-name.gemini {
   color: #3b82f6;
+}
+
+#summary-content .ai-name.perplexity {
+  color: #8b5cf6;
 }
 
 #new-discussion-btn {
