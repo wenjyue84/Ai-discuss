@@ -156,7 +156,7 @@ Before submitting a PR, test:
 - [ ] Messages can be sent to each platform
 - [ ] Responses are captured correctly
 - [ ] Mutual review (`/mutual`) works
-- [ ] Cross-reference (`@AI1 评价 @AI2`) works
+- [ ] Cross-reference (`@AI1 Evaluate @AI2`) works
 - [ ] Discussion mode works (if changed)
 - [ ] No console errors in:
   - Content scripts (check AI page console)

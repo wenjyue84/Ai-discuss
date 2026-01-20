@@ -239,28 +239,43 @@
           console.log(`[AI Panel] ChatGPT check: contentLen=${currentContent.length}, stableCount=${stableCount}, elapsed=${Math.round(elapsed / 1000)}s`);
         }
 
+        // Check if ChatGPT is still streaming
+        const isStreaming = checkIfStreaming();
+
         // Content is stable when content unchanged and has content
         const contentStable = currentContent === previousContent && currentContent.length > 0;
 
-        if (contentStable) {
-          stableCount++;
-          // Capture after 4 stable checks (2 seconds of stable content)
-          if (stableCount >= stableThreshold) {
-            if (currentContent !== lastCapturedContent) {
-              lastCapturedContent = currentContent;
-              console.log('[AI Panel] ChatGPT capturing response, length:', currentContent.length);
-              safeSendMessage({
-                type: 'RESPONSE_CAPTURED',
-                aiType: AI_TYPE,
-                content: currentContent
-              });
-              console.log('[AI Panel] ChatGPT response captured and sent!');
-            } else {
-              console.log('[AI Panel] ChatGPT content same as last capture, skipping');
+        // Only capture if content is stable AND not streaming
+        const minContentLength = 50; // Minimum content length to accept as complete
+        if (isStreaming) {
+          // Reset stable count if still streaming
+          stableCount = 0;
+        } else if (contentStable) {
+          // Don't accept very short responses even if stable - likely still streaming
+          if (currentContent.length < minContentLength) {
+            // Content is stable but too short - likely still streaming, continue waiting
+            stableCount = 0;
+          } else {
+            stableCount++;
+            // Capture after 4 stable checks (2 seconds of stable content)
+            if (stableCount >= stableThreshold) {
+              if (currentContent !== lastCapturedContent) {
+                lastCapturedContent = currentContent;
+                console.log('[AI Panel] ChatGPT capturing response, length:', currentContent.length);
+                safeSendMessage({
+                  type: 'RESPONSE_CAPTURED',
+                  aiType: AI_TYPE,
+                  content: currentContent
+                });
+                console.log('[AI Panel] ChatGPT response captured and sent!');
+              } else {
+                console.log('[AI Panel] ChatGPT content same as last capture, skipping');
+              }
+              return;
             }
-            return;
           }
         } else {
+          // Content changed, reset stable count
           stableCount = 0;
         }
 
@@ -271,6 +286,33 @@
       isCapturing = false;
       console.log('[AI Panel] ChatGPT capture loop ended');
     }
+  }
+
+  function checkIfStreaming() {
+    // Check for stop button (indicates streaming is active)
+    const stopButton = document.querySelector('button[aria-label*="Stop"], button[aria-label*="stop"], button[data-testid*="stop"]');
+    if (stopButton && isVisible(stopButton)) {
+      return true;
+    }
+
+    // Check for streaming indicators in the last assistant message
+    const lastAssistant = document.querySelector('[data-message-author-role="assistant"]:last-of-type, .agent-turn:last-of-type');
+    if (lastAssistant) {
+      // Check for streaming classes or attributes
+      const hasStreamingClass = lastAssistant.classList.toString().toLowerCase().includes('streaming') ||
+        lastAssistant.classList.toString().toLowerCase().includes('generating');
+      if (hasStreamingClass) {
+        return true;
+      }
+
+      // Check for cursor/typing indicators
+      const hasCursor = lastAssistant.querySelector('.cursor, [class*="cursor"], .typing, [class*="typing"]');
+      if (hasCursor) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   function getLatestResponse() {

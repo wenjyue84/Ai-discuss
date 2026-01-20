@@ -51,6 +51,9 @@
   setupResponseObserver();
 
   async function injectMessage(text) {
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/94790163-00e0-42e5-b5ec-318ce51d4c7e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'claude.js:53',message:'injectMessage entry',data:{textLength:text?.length||0,textPreview:text?.substring(0,100)||''},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     // Claude uses a contenteditable div with ProseMirror
     const inputSelectors = [
       'div[contenteditable="true"].ProseMirror',
@@ -64,6 +67,10 @@
       inputEl = document.querySelector(selector);
       if (inputEl) break;
     }
+
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/94790163-00e0-42e5-b5ec-318ce51d4c7e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'claude.js:66',message:'input field search result',data:{inputFound:!!inputEl,selectorsTried:inputSelectors.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
 
     if (!inputEl) {
       throw new Error('Could not find input field');
@@ -84,11 +91,17 @@
 
     // Find and click the send button
     const sendButton = findSendButton();
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/94790163-00e0-42e5-b5ec-318ce51d4c7e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'claude.js:87',message:'send button search result',data:{sendButtonFound:!!sendButton},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     if (!sendButton) {
       throw new Error('Could not find send button');
     }
 
     sendButton.click();
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/94790163-00e0-42e5-b5ec-318ce51d4c7e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'claude.js:91',message:'send button clicked',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
 
     // Start capturing response after sending
     console.log('[AI Panel] Claude message sent, starting response capture...');

@@ -673,6 +673,51 @@ header .subtitle {
   transform: translateY(-1px);
 }
 
+/* Create New Chat Button */
+.create-chat-btn {
+  width: 100%;
+  padding: 12px 16px;
+  background: var(--bg-card);
+  color: var(--accent-secondary);
+  border: 1px solid var(--border-accent);
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.create-chat-btn:hover {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: var(--accent-primary);
+  box-shadow: var(--shadow-md), 0 0 0 1px var(--accent-glow);
+  transform: translateY(-1px);
+}
+
+.create-chat-btn:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
+}
+
+.create-chat-btn:disabled {
+  background: var(--bg-elevated);
+  color: var(--text-disabled);
+  border-color: var(--border-subtle);
+  cursor: not-allowed;
+  box-shadow: none;
+  opacity: 0.6;
+}
+
+.create-chat-btn i {
+  font-size: 14px;
+}
+
 /* Discussion Mode */
 .discussion-setup h3,
 .discussion-summary h3 {
@@ -736,15 +781,16 @@ header .subtitle {
 
 #discussion-topic {
   width: 100%;
-  padding: 14px;
+  padding: 10px 14px;
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
   background: var(--bg-card);
   color: var(--text-secondary);
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.5;
   resize: vertical;
-  min-height: 80px;
+  min-height: 50px;
+  max-height: 100px;
   margin-bottom: 12px;
   word-wrap: break-word;
   overflow-wrap: break-word;
@@ -899,6 +945,10 @@ header .subtitle {
   font-size: 12px;
   color: var(--text-muted);
   font-weight: 500;
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  line-height: 1.4;
 }
 
 #interject-input {

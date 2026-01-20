@@ -97,9 +97,9 @@ The parser handles multiple command formats:
 1. **Mutual Review** (`/mutual [prompt]`)
    - Triggers cross-evaluation of all selected AIs
    - Each AI receives responses from all others
-   - Default prompt: "请评价以上观点。你同意什么？不同意什么？有什么补充？"
+   - Default prompt: "Please evaluate the above viewpoints. What do you agree with? What do you disagree with? What would you add?"
 
-2. **Cross Reference** (`@AI1 评价 @AI2` or `/cross @targets <- @sources message`)
+2. **Cross Reference** (`@AI1 Evaluate @AI2` or `/cross @targets <- @sources message`)
    - Two AI format: Last mentioned = source, first = target
    - Three+ AI format: Requires `/cross` command with arrow syntax
    - Automatically wraps source responses in XML tags

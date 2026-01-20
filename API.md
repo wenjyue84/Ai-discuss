@@ -170,7 +170,7 @@ chrome.runtime.sendMessage({
 ```javascript
 {
   mutual: true,
-  prompt: string,  // Default: "请评价以上观点。你同意什么？不同意什么？有什么补充？"
+  prompt: string,  // Default: "Please evaluate the above viewpoints. What do you agree with? What do you disagree with? What would you add?"
   crossRef: false,
   mentions: [],
   originalMessage: string
@@ -181,8 +181,8 @@ chrome.runtime.sendMessage({
 
 **Format:**
 ```
-@AI1 评价 @AI2
-@AI1 看看 @AI2 的回答
+@AI1 Evaluate @AI2
+@AI1 Review @AI2's response
 ```
 
 **Parsed Result:**
@@ -441,11 +441,11 @@ const AI_TYPES = ['claude', 'chatgpt', 'gemini'];
 
 ```javascript
 const CROSS_REF_ACTIONS = {
-  evaluate: { prompt: '评价一下' },
-  learn: { prompt: '有什么值得借鉴的' },
-  critique: { prompt: '批评一下，指出问题' },
-  supplement: { prompt: '有什么遗漏需要补充' },
-  compare: { prompt: '对比一下你的观点' }
+  evaluate: { prompt: 'Evaluate this' },
+  learn: { prompt: 'What is worth learning from this' },
+  critique: { prompt: 'Critique this and point out issues' },
+  supplement: { prompt: 'What is missing that needs to be added' },
+  compare: { prompt: 'Compare this with your viewpoint' }
 };
 ```
 

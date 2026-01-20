@@ -164,22 +164,40 @@ async function pingContentScript(aiType) {
 }
 
 async function sendMessageToAI(aiType, message) {
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/94790163-00e0-42e5-b5ec-318ce51d4c7e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'background.js:166',message:'sendMessageToAI entry',data:{aiType,messageLength:message?.length||0,messagePreview:message?.substring(0,100)||''},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,C'})}).catch(()=>{});
+  // #endregion
   try {
     // Find the tab for this AI
     const tab = await findAITab(aiType);
+
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/94790163-00e0-42e5-b5ec-318ce51d4c7e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'background.js:170',message:'tab found check',data:{aiType,tabFound:!!tab,tabId:tab?.id,tabUrl:tab?.url},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
 
     if (!tab) {
       return { success: false, error: `No ${aiType} tab found` };
     }
 
     // Ensure content script is loaded before sending message
+    let pingSuccess = false;
     try {
       await chrome.tabs.sendMessage(tab.id, { type: 'PING' });
+      pingSuccess = true;
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/94790163-00e0-42e5-b5ec-318ce51d4c7e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'background.js:177',message:'ping successful',data:{aiType,tabId:tab.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,C'})}).catch(()=>{});
+      // #endregion
     } catch (pingErr) {
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/94790163-00e0-42e5-b5ec-318ce51d4c7e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'background.js:179',message:'ping failed',data:{aiType,tabId:tab.id,error:pingErr.message,willInject:pingErr.message.includes('Receiving end does not exist')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,C'})}).catch(()=>{});
+      // #endregion
       // If ping fails, try to inject the script
       if (pingErr.message.includes('Receiving end does not exist')) {
         console.log(`[AI Panel] Content script not found for ${aiType}, attempting to inject before sending message...`);
         const injected = await injectContentScript(aiType, tab.id);
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/94790163-00e0-42e5-b5ec-318ce51d4c7e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'background.js:182',message:'injection attempt result',data:{aiType,tabId:tab.id,injected},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,C'})}).catch(()=>{});
+        // #endregion
         if (!injected) {
           return { success: false, error: `Content script not loaded. Please refresh the ${aiType} tab.` };
         }
@@ -189,10 +207,16 @@ async function sendMessageToAI(aiType, message) {
     }
 
     // Send message to content script
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/94790163-00e0-42e5-b5ec-318ce51d4c7e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'background.js:192',message:'sending INJECT_MESSAGE to content script',data:{aiType,tabId:tab.id,messageLength:message?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,C,D'})}).catch(()=>{});
+    // #endregion
     const response = await chrome.tabs.sendMessage(tab.id, {
       type: 'INJECT_MESSAGE',
       message
     });
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/94790163-00e0-42e5-b5ec-318ce51d4c7e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'background.js:196',message:'INJECT_MESSAGE response received',data:{aiType,tabId:tab.id,success:response?.success,error:response?.error},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,C,D,E'})}).catch(()=>{});
+    // #endregion
 
     // Notify side panel
     notifySidePanel('SEND_RESULT', {
@@ -203,6 +227,9 @@ async function sendMessageToAI(aiType, message) {
 
     return response;
   } catch (err) {
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/94790163-00e0-42e5-b5ec-318ce51d4c7e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'background.js:206',message:'sendMessageToAI error',data:{aiType,error:err.message,stack:err.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,C,D,E'})}).catch(()=>{});
+    // #endregion
     return { success: false, error: err.message };
   }
 }

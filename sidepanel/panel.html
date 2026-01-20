@@ -16,9 +16,14 @@
     <!-- Mode Switcher -->
     <section class="mode-switcher">
       <button class="mode-btn" id="mode-settings"><i class="fas fa-cog"></i> Settings</button>
-      <button class="mode-btn active" id="mode-normal"><i class="fas fa-paper-plane"></i> Normal</button>
-      <button class="mode-btn" id="mode-discussion"><i class="fas fa-users"></i> Discussion</button>
+      <button class="mode-btn" id="mode-normal"><i class="fas fa-paper-plane"></i> Normal</button>
+      <button class="mode-btn active" id="mode-discussion"><i class="fas fa-users"></i> Discussion</button>
     </section>
+
+    <!-- Create New Chat Button -->
+    <button class="create-chat-btn" id="create-chat-btn" title="Open new chats for all participants">
+      <i class="fas fa-comments"></i> Create New Chat for All Participants
+    </button>
 
     <!-- Settings Mode Content -->
     <div id="settings-mode" class="hidden">
@@ -45,7 +50,7 @@
     </div>
 
     <!-- Normal Mode Content -->
-    <div id="normal-mode">
+    <div id="normal-mode" class="hidden">
       <section class="input-section">
         <div class="feature-section-label">
           <i class="fas fa-tools"></i> Quick Actions
@@ -103,7 +108,7 @@
     </div><!-- end normal-mode -->
 
     <!-- Discussion Mode Content -->
-    <div id="discussion-mode" class="hidden">
+    <div id="discussion-mode">
       <section class="discussion-setup" id="discussion-setup">
         <h3><i class="fas fa-play-circle"></i> Start Discussion</h3>
         <div class="participant-select">
@@ -125,8 +130,7 @@
           <p class="hint">Please select 2 participants</p>
         </div>
         <textarea id="discussion-topic"
-          placeholder="Enter discussion topic...&#10;&#10;Example: What are the pros and cons of microservices architecture vs monolithic architecture?"
-          rows="4"></textarea>
+          rows="2">Latest important news from the past 1 week related to new features of advanced AI tools included but not limited to Gemini, Claude, Chatgpt, Grok, Cursor, Antigravity, NotebookLm, Notion AI, Perplexity, Cursor, Copilot, Deepseek, Qwen, Midjourney, Stable Diffusion, Manus, Llama, Devin, Comet and Replit.</textarea>
         <button id="start-discussion-btn"><i class="fas fa-rocket"></i> Start Discussion</button>
       </section>
 

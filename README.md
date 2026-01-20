@@ -1,20 +1,18 @@
-# AI 圆桌 (AI Discuss)
+# AI Discuss
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Status: Experimental](https://img.shields.io/badge/Status-Experimental-orange.svg)](#-experimental-prototype--实验性原型)
+[![Status: Experimental](https://img.shields.io/badge/Status-Experimental-orange.svg)](#-experimental-prototype)
 
-> 让多个 AI 助手围桌讨论，交叉评价，深度协作
+> Orchestrate multiple AI assistants in a roundtable discussion, enabling cross-evaluation and deep collaboration
 
-一个 Chrome 扩展，让你像"会议主持人"一样，同时操控多个 AI（Claude、ChatGPT、Gemini），实现真正的 AI 圆桌会议。
+A Chrome extension that lets you act as a "meeting facilitator," simultaneously controlling multiple AIs (Claude, ChatGPT, Gemini) to create a true AI roundtable discussion.
 
-<!-- TODO: 添加 GIF 演示 -->
+<!-- TODO: Add demo GIF -->
 <!-- ![Demo GIF](assets/demo.gif) -->
 
 ---
 
-## 🔬 Experimental Prototype / 实验性原型
-
-**EN**
+## 🔬 Experimental Prototype
 
 This is an **experimental prototype** built to validate a working method:
 
@@ -23,20 +21,9 @@ This is an **experimental prototype** built to validate a working method:
 It is **not** a production-ready tool, nor an attempt to compete with AI aggregators or workflow platforms.
 Think of it as a *runnable experiment* rather than a polished product.
 
-**中文**
-
-这是一个**实验性原型**，用于验证一种工作方式：
-
-> **同一个问题，让多个模型同时回答并互相辩论，用分歧与冲突逼出漏洞、拓展思路。**
-
-它**不是**一个生产级工具，也不是为了和任何 AI 聚合器或工作流产品竞争。
-你可以把它理解为：**一份可以直接运行的实验记录**。
-
 ---
 
-## 🎯 Non-goals / 刻意不做的事
-
-**EN**
+## 🎯 Non-goals
 
 * No guarantee of long-term compatibility (AI web UIs change frequently)
 * No promise of ongoing maintenance or rapid fixes
@@ -46,21 +33,9 @@ Think of it as a *runnable experiment* rather than a polished product.
 
 The focus is validating the **roundtable workflow**, not building software for its own sake.
 
-**中文**
-
-* 不承诺长期兼容（AI 网页端结构随时可能变化）
-* 不保证持续维护或快速修复
-* 不做云端账号、数据存储或同步
-* 不做复杂的工作流编排、导出或模板库
-* 不追求覆盖所有模型或平台
-
-重点在于**验证"圆桌式思考流程"是否有价值**，而不是把软件本身做大做全。
-
 ---
 
-## ❓ Why this does NOT use APIs / 为什么不用 API
-
-**EN**
+## ❓ Why this does NOT use APIs
 
 This project intentionally operates on the **web UIs** (Claude / ChatGPT / Gemini) instead of APIs.
 
@@ -68,38 +43,20 @@ In practice, **API and web chat often behave differently** — commonly due to m
 
 I'm currently most satisfied with, and calibrated to, the **web chat experience**, so this experiment stays on the web to validate the workflow under real conditions I actually use.
 
-**中文**
+---
 
-这个项目刻意选择直接操作 **Claude / ChatGPT / Gemini 的网页端**，而不是使用 API。
+## Core Features
 
-在实际使用中，**API 和 Web 端的表现往往并不一致**，常见原因包括：模型版本差异、隐藏的系统设置、采样参数，以及网页端特有的交互能力。
-
-目前我对 **Web 端 Chat 的体验最熟悉、也最满意**，因此这次实验选择留在 Web 端，验证的是我真实使用场景下的思考流程，而不是 API 能力。
+- **Unified Console** - Manage multiple AIs simultaneously through Chrome sidebar
+- **Multi-target Sending** - Send one message to multiple AIs and compare responses
+- **Mutual Review Mode** - Let all AIs critique each other with equal participation (`/mutual` command)
+- **Cross-reference** - Have Claude evaluate ChatGPT's response, or vice versa
+- **Discussion Mode** - Two AIs engage in multi-round deep discussions on the same topic
+- **No API Required** - Directly operates web interfaces, uses your existing AI subscriptions
 
 ---
 
-## 核心特性
-
-- **统一控制台** - 通过 Chrome 侧边栏同时管理多个 AI
-- **多目标发送** - 一条消息同时发给多个 AI，对比回答
-- **互评模式** - 让所有 AI 互相评价，对等参与（/mutual 命令）
-- **交叉引用** - 让 Claude 评价 ChatGPT 的回答，或反过来
-- **讨论模式** - 两个 AI 就同一主题进行多轮深度讨论
-- **无需 API** - 直接操作网页界面，使用你现有的 AI 订阅
-
----
-
-## 🧭 推荐使用流程 / Recommended Workflow
-
-**中文**
-
-1. **普通模式**：同题多答，制造分歧
-2. **/mutual**：互相挑刺，逼出前提
-3. **@ 审计**：由你决定谁审谁
-4. **/cross**：两方围攻一方，压力测试
-5. **讨论模式**：只在需要时进行多轮辩论
-
-**EN**
+## 🧭 Recommended Workflow
 
 1. **Normal** — Ask the same question to multiple models (create divergence)
 2. **/mutual** — Let models critique each other (expose assumptions)
@@ -109,207 +66,204 @@ I'm currently most satisfied with, and calibrated to, the **web chat experience*
 
 ---
 
-## 🚀 快速开始 / Quick Start
+## 🚀 Quick Start
 
-### 安装
+### Installation
 
-1. 下载或克隆本仓库
-2. 打开 Chrome，进入 `chrome://extensions/`
-3. 开启右上角「开发者模式」
-4. 点击「加载已解压的扩展程序」
-5. 选择本项目文件夹
+1. Download or clone this repository
+2. Open Chrome and navigate to `chrome://extensions/`
+3. Enable "Developer mode" (top right)
+4. Click "Load unpacked"
+5. Select this project folder
 
-### 首次使用提示：请刷新页面
+### First-run Tip: Refresh Pages
 
-打开侧边栏并选中目标 AI 后，**建议把每个 AI 的网页刷新一次**。
-这样可以确保插件正确获取页面内容并稳定绑定（尤其是这些标签页已经打开了一段时间的情况下）。
+After opening the sidebar and selecting target AIs, **refresh each AI page once** to ensure reliable detection (especially if these tabs have been open for a while).
 
-> **First-run tip:** After opening the sidebar and selecting target AIs, **refresh each AI page once** to ensure reliable detection.
+### Setup
 
-### 准备工作
-
-1. 打开 Chrome，登录以下 AI 平台（根据需要）：
+1. Open Chrome and log in to the following AI platforms (as needed):
    - [Claude](https://claude.ai)
    - [ChatGPT](https://chatgpt.com)
    - [Gemini](https://gemini.google.com)
 
-2. 推荐使用 Chrome 的 Split Tab 功能，将 2 个 AI 页面并排显示
+2. Recommended: Use Chrome's Split Tab feature to display 2 AI pages side by side
 
-3. 点击扩展图标，打开侧边栏控制台
+3. Click the extension icon to open the sidebar console
 
 ---
 
-## 使用方法
+## Usage
 
-### 普通模式
+### Normal Mode
 
-**基本发送**
-1. 勾选要发送的目标 AI（Claude / ChatGPT / Gemini）
-2. 输入消息
-3. 按 Enter 或点击「发送」按钮
+**Basic Sending**
+1. Check the target AIs you want to send to (Claude / ChatGPT / Gemini)
+2. Enter your message
+3. Press Enter or click the "Send" button
 
-**@ 提及语法**
-- 点击 @ 按钮快速插入 AI 名称
-- 或手动输入：`@Claude 你怎么看这个问题？`
+**@ Mention Syntax**
+- Click the @ button to quickly insert AI names
+- Or type manually: `@Claude What do you think about this question?`
 
-**互评（推荐）**
+**Mutual Review (Recommended)**
 
-基于当前已有的回复，让所有选中的 AI 互相评价：
+Based on existing responses, let all selected AIs evaluate each other:
 ```
 /mutual
-/mutual 重点分析优缺点
+/mutual Focus on analyzing strengths and weaknesses
 ```
 
-用法：
-1. 先发送一个问题给多个 AI，等待它们各自回复
-2. 点击 `/mutual` 按钮或输入 `/mutual`
-3. 每个 AI 都会收到其他 AI 的回复并进行评价
-   - 2 AI：A 评价 B，B 评价 A
-   - 3 AI：A 评价 BC，B 评价 AC，C 评价 AB
+Usage:
+1. First, send a question to multiple AIs and wait for their responses
+2. Click the `/mutual` button or type `/mutual`
+3. Each AI will receive responses from all others and provide evaluations
+   - 2 AIs: A evaluates B, B evaluates A
+   - 3 AIs: A evaluates BC, B evaluates AC, C evaluates AB
 
-**交叉引用（单向）**
+**Cross-reference (One-way)**
 
-两个 AI（自动检测）：
+Two AIs (auto-detected):
 ```
-@Claude 评价一下 @ChatGPT
+@Claude Evaluate @ChatGPT
 ```
-最后 @ 的是来源（被评价），前面的是目标（评价者）
+The last @ mentioned is the source (being evaluated), the first is the target (evaluator).
 
-三个 AI（使用 /cross 命令）：
+Three AIs (use `/cross` command):
 ```
-/cross @Claude @Gemini <- @ChatGPT 评价一下
-/cross @ChatGPT <- @Claude @Gemini 对比一下
+/cross @Claude @Gemini <- @ChatGPT Evaluate this
+/cross @ChatGPT <- @Claude @Gemini Compare these
 ```
 
-**动作下拉菜单**：快速插入预设动作词（评价/借鉴/批评/补充/对比）
+**Action Dropdown Menu**: Quickly insert preset action words (evaluate/learn/critique/supplement/compare)
 
-### 讨论模式
+### Discussion Mode
 
-让两个 AI 就同一主题进行深度辩论：
+Let two AIs engage in a deep debate on the same topic:
 
-1. 点击顶部「讨论」切换到讨论模式
-2. 选择 2 个参与讨论的 AI
-3. 输入讨论主题
-4. 点击「开始讨论」
+1. Click "Discussion" at the top to switch to discussion mode
+2. Select 2 AIs to participate in the discussion
+3. Enter the discussion topic
+4. Click "Start Discussion"
 
-**讨论流程**
+**Discussion Flow**
 
 ```
-第 1 轮: 两个 AI 各自阐述观点
-第 2 轮: 互相评价对方的观点
-第 3 轮: 回应对方的评价，深化讨论
+Round 1: Both AIs present their initial positions
+Round 2: Each AI evaluates the other's position
+Round 3: Respond to the other's evaluation, deepen the discussion
 ...
-总结: 双方各自生成讨论总结
+Summary: Both AIs generate independent discussion summaries
 ```
 
 ---
 
-## 技术架构
+## Technical Architecture
 
-### 项目结构
+### Project Structure
 
 ```
 ai-roundtable/
-├── manifest.json           # Chrome 扩展配置 (Manifest V3)
-├── background.js           # Service Worker 消息中转
+├── manifest.json           # Chrome extension config (Manifest V3)
+├── background.js           # Service Worker message relay
 ├── sidepanel/
-│   ├── panel.html         # 侧边栏 UI
-│   ├── panel.css          # 样式
-│   └── panel.js           # 控制逻辑
+│   ├── panel.html         # Sidebar UI
+│   ├── panel.css          # Styles
+│   └── panel.js           # Control logic
 ├── content/
-│   ├── claude.js          # Claude 页面注入脚本
-│   ├── chatgpt.js         # ChatGPT 页面注入脚本
-│   └── gemini.js          # Gemini 页面注入脚本
-└── icons/                  # 扩展图标
+│   ├── claude.js          # Claude page injection script
+│   ├── chatgpt.js         # ChatGPT page injection script
+│   └── gemini.js          # Gemini page injection script
+└── icons/                  # Extension icons
 ```
 
-### 工作原理
+### How It Works
 
-1. **Content Scripts（内容脚本）**：注入到每个 AI 网页中，负责：
-   - 监听来自 background script 的消息
-   - 在页面中查找输入框并注入消息
-   - 模拟点击发送按钮
-   - 监控 DOM 变化，捕获 AI 回复
-   - 检测流式输出完成状态
+1. **Content Scripts**: Injected into each AI webpage, responsible for:
+   - Listening for messages from background script
+   - Finding input fields in the page and injecting messages
+   - Simulating send button clicks
+   - Monitoring DOM changes to capture AI responses
+   - Detecting streaming output completion status
 
-2. **Background Service Worker**：作为消息中转中心：
-   - 管理标签页状态
-   - 在 sidepanel 和 content scripts 之间传递消息
-   - 存储最新回复（使用 `chrome.storage.session`）
-   - 处理标签页更新和关闭事件
+2. **Background Service Worker**: Acts as message relay center:
+   - Manages tab state
+   - Routes messages between sidepanel and content scripts
+   - Stores latest responses (using `chrome.storage.session`)
+   - Handles tab update and close events
 
-3. **Side Panel（侧边栏）**：用户界面：
-   - 显示连接状态
-   - 提供消息输入和发送控制
-   - 解析命令（/mutual, /cross, @mentions）
-   - 管理讨论模式状态
-   - 显示活动日志
+3. **Side Panel**: User interface:
+   - Displays connection status
+   - Provides message input and send controls
+   - Parses commands (`/mutual`, `/cross`, `@mentions`)
+   - Manages discussion mode state
+   - Displays activity log
 
-### 消息流程
+### Message Flow
 
 ```
-用户输入 → Side Panel (panel.js)
+User Input → Side Panel (panel.js)
     ↓
-解析命令/目标 → Background (background.js)
+Parse Command/Target → Background (background.js)
     ↓
-查找对应标签页 → Content Script (claude.js/chatgpt.js/gemini.js)
+Find Corresponding Tab → Content Script (claude.js/chatgpt.js/gemini.js)
     ↓
-注入消息到页面 → 模拟点击发送
+Inject Message into Page → Simulate Send Click
     ↓
-监控 DOM 变化 → 捕获回复
+Monitor DOM Changes → Capture Response
     ↓
-通知 Background → 更新存储
+Notify Background → Update Storage
     ↓
-通知 Side Panel → 显示日志
+Notify Side Panel → Display Log
 ```
 
-详细技术文档请参考 [TECHNICAL.md](TECHNICAL.md)
+For detailed technical documentation, see [TECHNICAL.md](TECHNICAL.md)
 
 ---
 
-## 隐私说明
+## Privacy
 
-- **不上传任何内容** - 扩展完全在本地运行，不向任何服务器发送数据
-- **无遥测/日志采集** - 不收集使用数据、不追踪行为
-- **数据存储位置** - 仅使用浏览器本地存储（chrome.storage.local）
-- **无第三方服务** - 不依赖任何外部 API 或服务
-- **如何删除数据** - 卸载扩展即可完全清除，或在 Chrome 扩展设置中清除存储
-
----
-
-## 常见问题
-
-### Q: 安装后无法连接 AI 页面？
-**A:** 安装或更新扩展后，需要刷新已打开的 AI 页面。这是因为 content scripts 只在页面加载时注入。
-
-### Q: 交叉引用时提示"无法获取回复"？
-**A:** 确保源 AI 已经有回复。系统会获取该 AI 的最新一条回复。如果回复正在生成中，请等待完成后再尝试。
-
-### Q: ChatGPT 回复很长时会超时吗？
-**A:** 不会。系统支持最长 10 分钟的回复捕获。回复检测机制会等待内容稳定（2 秒无变化）后才标记为完成。
-
-### Q: 为什么有时候消息发送失败？
-**A:** 可能的原因：
-- AI 页面结构已更新，需要更新 content script 的 DOM 选择器
-- 页面正在加载中，等待页面完全加载后再试
-- 输入框被其他元素遮挡，尝试滚动页面或刷新
-
-### Q: 讨论模式中如何插话？
-**A:** 在讨论进行中，使用「插话」功能可以向双方同时发送消息。插话会自动包含对方的最新回复，让 AI 在了解对方观点的基础上回应你的问题。
-
-### Q: 支持哪些浏览器？
-**A:** 目前仅支持 Chrome 和基于 Chromium 的浏览器（如 Edge、Brave），因为使用了 Manifest V3 和 Side Panel API。
+- **No Data Upload** - Extension runs entirely locally, sends no data to any server
+- **No Telemetry/Logging** - Does not collect usage data or track behavior
+- **Data Storage Location** - Uses only browser local storage (`chrome.storage.local`)
+- **No Third-party Services** - Does not depend on any external APIs or services
+- **How to Delete Data** - Uninstalling the extension completely removes data, or clear storage in Chrome extension settings
 
 ---
 
-## 已知限制
+## FAQ
 
-- **DOM 依赖**：依赖各 AI 平台的 DOM 结构，平台更新可能导致功能失效
-- **讨论模式**：固定 2 个参与者，不支持 3+ 方讨论
-- **特殊功能**：不支持 Claude Artifacts、ChatGPT Canvas、Gemini 多模态输入等特殊功能
-- **流式输出**：仅捕获最终完整回复，不捕获中间状态
-- **多标签页**：如果同一 AI 有多个标签页打开，只会使用第一个匹配的标签页
-- **语言支持**：界面主要支持中英文，其他语言可能显示异常
+### Q: Can't connect to AI pages after installation?
+**A:** After installing or updating the extension, refresh any open AI pages. This is because content scripts are only injected when pages load.
+
+### Q: "Unable to get response" when cross-referencing?
+**A:** Ensure the source AI has already responded. The system retrieves that AI's latest response. If a response is still being generated, wait for it to complete before trying again.
+
+### Q: Will ChatGPT timeout on very long responses?
+**A:** No. The system supports up to 10 minutes of response capture. The response detection mechanism waits for content to stabilize (2 seconds with no changes) before marking it as complete.
+
+### Q: Why do messages sometimes fail to send?
+**A:** Possible reasons:
+- AI page structure has been updated, requiring updates to content script DOM selectors
+- Page is still loading, wait for page to fully load before trying again
+- Input field is blocked by other elements, try scrolling the page or refreshing
+
+### Q: How to interject during discussion mode?
+**A:** During an active discussion, use the "Interject" feature to send a message to both AIs simultaneously. Interjections automatically include the other AI's latest response, allowing AIs to respond to your question while understanding the other's viewpoint.
+
+### Q: Which browsers are supported?
+**A:** Currently only Chrome and Chromium-based browsers (such as Edge, Brave) are supported, due to the use of Manifest V3 and Side Panel API.
+
+---
+
+## Known Limitations
+
+- **DOM Dependency**: Depends on each AI platform's DOM structure; platform updates may cause features to break
+- **Discussion Mode**: Fixed at 2 participants, does not support 3+ party discussions
+- **Special Features**: Does not support Claude Artifacts, ChatGPT Canvas, Gemini multimodal input, and other special features
+- **Streaming Output**: Only captures final complete responses, not intermediate states
+- **Multiple Tabs**: If multiple tabs of the same AI are open, only the first matching tab will be used
+- **Language Support**: Interface primarily supports English; other languages may display incorrectly
 
 ---
 
@@ -328,8 +282,3 @@ Contributions welcome (low-maintenance project):
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details.
-
----
-
-
-

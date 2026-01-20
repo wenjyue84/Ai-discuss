@@ -27,11 +27,12 @@ const connectedTabs = {
 let discussionState = {
   active: false,
   topic: '',
-  participants: [],  // [ai1, ai2]
+  participants: [],  // [ai1, ai2] or [ai1, ai2, ai3]
   currentRound: 0,
-  history: [],  // [{round, ai, type: 'initial'|'evaluation'|'response', content}]
+  history: [],  // [{round, ai, type: 'initial'|'evaluation'|'response', content, evaluationTarget?}]
   pendingResponses: new Set(),  // AIs we're waiting for
-  roundType: null  // 'initial', 'cross-eval', 'counter'
+  roundType: null,  // 'initial', 'cross-eval', 'counter'
+  pendingEvaluations: null  // Map<aiType, {evaluated: Set<aiType>, remaining: Array<aiType>}> for 3-participant sequential evaluations
 };
 
 
@@ -116,9 +117,11 @@ function setupEventListeners() {
       updateTabStatus(message.aiType, message.connected);
     } else if (message.type === 'RESPONSE_CAPTURED') {
       log(`${message.aiType}: Response captured`, 'success');
-      // Handle discussion mode response
+      // Handle discussion mode response (async, don't await)
       if (discussionState.active && discussionState.pendingResponses.has(message.aiType)) {
-        handleDiscussionResponse(message.aiType, message.content);
+        handleDiscussionResponse(message.aiType, message.content).catch(err => {
+          console.error('Error handling discussion response:', err);
+        });
       }
     } else if (message.type === 'SEND_RESULT') {
       if (message.success) {
@@ -422,7 +425,7 @@ async function sendToAI(aiType, message) {
   }
 
   return new Promise((resolve) => {
-    chrome.runtime.sendMessage(
+      chrome.runtime.sendMessage(
       { type: 'SEND_MESSAGE', aiType, message },
       (response) => {
         if (response?.success) {
@@ -466,6 +469,9 @@ function setupDiscussionMode() {
   document.getElementById('mode-normal').addEventListener('click', () => switchMode('normal'));
   document.getElementById('mode-discussion').addEventListener('click', () => switchMode('discussion'));
 
+  // Create new chat button
+  document.getElementById('create-chat-btn').addEventListener('click', createNewChatsForAll);
+
   // Discussion controls
   document.getElementById('start-discussion-btn').addEventListener('click', startDiscussion);
   document.getElementById('next-round-btn').addEventListener('click', nextRound);
@@ -478,6 +484,24 @@ function setupDiscussionMode() {
   // Participant selection validation
   document.querySelectorAll('input[name="participant"]').forEach(checkbox => {
     checkbox.addEventListener('change', validateParticipants);
+  });
+
+  // Handle default topic text area behavior
+  const topicTextarea = document.getElementById('discussion-topic');
+  const defaultTopic = 'Latest important news from the past 1 week related to new features of advanced AI tools included but not limited to Gemini, Claude, Chatgpt, Grok, Cursor, Antigravity, NotebookLm, Notion AI, Perplexity, Cursor, Copilot, Deepseek, Qwen, Midjourney, Stable Diffusion, Manus, Llama, Devin, Comet and Replit.';
+  
+  // On focus, if text is still default, select all for easy replacement
+  topicTextarea.addEventListener('focus', () => {
+    if (topicTextarea.value.trim() === defaultTopic) {
+      topicTextarea.select();
+    }
+  });
+
+  // On blur, if text is empty, restore default (less intrusive than on input)
+  topicTextarea.addEventListener('blur', () => {
+    if (topicTextarea.value.trim() === '') {
+      topicTextarea.value = defaultTopic;
+    }
   });
 }
 
@@ -522,10 +546,13 @@ function validateParticipants() {
 }
 
 async function startDiscussion() {
-  const topic = document.getElementById('discussion-topic').value.trim();
+  const topicTextarea = document.getElementById('discussion-topic');
+  let topic = topicTextarea.value.trim();
+  
+  // If topic is empty, use default
   if (!topic) {
-    log('Please enter a discussion topic', 'error');
-    return;
+    topic = 'Latest important news from the past 1 week related to new features of advanced AI tools included but not limited to Gemini, Claude, Chatgpt, Grok, Cursor, Antigravity, NotebookLm, Notion AI, Perplexity, Cursor, Copilot, Deepseek, Qwen, Midjourney, Stable Diffusion, Manus, Llama, Devin, Comet and Replit.';
+    topicTextarea.value = topic;
   }
 
   const selected = Array.from(document.querySelectorAll('input[name="participant"]:checked'))
@@ -544,7 +571,8 @@ async function startDiscussion() {
     currentRound: 1,
     history: [],
     pendingResponses: new Set(selected),
-    roundType: 'initial'
+    roundType: 'initial',
+    pendingEvaluations: null
   };
 
   // Update UI
@@ -590,10 +618,16 @@ function startResponsePolling() {
     }
 
     // Check each pending AI for responses
+    const minContentLength = 50; // Minimum content length to accept as response
     for (const aiType of discussionState.pendingResponses) {
       try {
         const response = await getLatestResponse(aiType);
         if (response && response.trim().length > 0) {
+          // Don't process very short responses - likely still streaming
+          if (response.trim().length < minContentLength) {
+            continue; // Skip very short responses, continue polling
+          }
+          
           // Check if this is a new response (not already in history)
           const alreadyRecorded = discussionState.history.some(
             h => h.ai === aiType && 
@@ -603,6 +637,7 @@ function startResponsePolling() {
           
           if (!alreadyRecorded) {
             log(`[Poll] Found ${aiType} response via polling`, 'success');
+            // Use handleDiscussionResponse which will verify completion
             handleDiscussionResponse(aiType, response);
           }
         }
@@ -613,19 +648,168 @@ function startResponsePolling() {
   }, 2000); // Check every 2 seconds
 }
 
-function handleDiscussionResponse(aiType, content) {
+async function verifyResponseComplete(aiType, initialContent) {
+  // Verify that the response is actually complete (not still streaming)
+  // Check multiple times to ensure content is stable
+  const checkInterval = 500;
+  const stableThreshold = 4; // 2 seconds of stable content (4 checks * 500ms)
+  const maxWait = 30000; // 30 seconds max wait (increased for long responses)
+  const minContentLength = 50; // Minimum content length to accept as complete (reject suspiciously short responses)
+  let previousContent = initialContent;
+  let stableCount = 0;
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < maxWait) {
+    await sleep(checkInterval);
+    
+    try {
+      const currentContent = await getLatestResponse(aiType);
+      
+      if (!currentContent || currentContent.trim().length === 0) {
+        // No content yet, continue waiting
+        continue;
+      }
+
+      if (previousContent !== null) {
+        if (currentContent.length > previousContent.length) {
+          // Content is still growing - reset stable count
+          stableCount = 0;
+          previousContent = currentContent;
+          continue;
+        } else if (currentContent === previousContent) {
+          // Content is stable
+          stableCount++;
+          if (stableCount >= stableThreshold) {
+            // Only accept as complete if content meets minimum length requirement
+            // This prevents accepting very short responses that might be captured during streaming pauses
+            if (currentContent.length >= minContentLength) {
+              return currentContent; // Response is complete
+            } else {
+              // Content is stable but too short - likely still streaming, continue waiting
+              stableCount = 0; // Reset to continue waiting
+              continue;
+            }
+          }
+        } else {
+          // Content changed but not growing (might be a different response)
+          stableCount = 0;
+          previousContent = currentContent;
+        }
+      } else {
+        // First check
+        previousContent = currentContent;
+      }
+    } catch (err) {
+      // Ignore errors, continue checking
+    }
+  }
+
+  // Timeout - return the last known content only if it meets minimum length
+  const finalContent = previousContent || initialContent;
+  return finalContent;
+}
+
+async function handleDiscussionResponse(aiType, content) {
   if (!discussionState.active) return;
 
+  // Verify response is complete before marking as done
+  const verifiedContent = await verifyResponseComplete(aiType, content);
+
+  // Double-check: verify content hasn't grown since verification
+  await sleep(1000); // Wait 1 second after verification
+  const postVerifyContent = await getLatestResponse(aiType);
+  let finalContent = verifiedContent;
+  if (postVerifyContent && postVerifyContent.length > verifiedContent.length) {
+    // Content is still growing - re-verify
+    finalContent = await verifyResponseComplete(aiType, postVerifyContent);
+  }
+
+  // Determine evaluation target for sequential evaluations
+  let evaluationTarget = null;
+  if (discussionState.pendingEvaluations) {
+    const evalState = discussionState.pendingEvaluations.get(aiType);
+    if (evalState && evalState.remaining.length > 0) {
+      // The target is the first remaining (the one we just evaluated)
+      evaluationTarget = evalState.remaining[0];
+    }
+  }
+
   // Record this response in history
-  discussionState.history.push({
+  const historyEntry = {
     round: discussionState.currentRound,
     ai: aiType,
     type: discussionState.roundType,
-    content: content
-  });
+    content: finalContent
+  };
+  if (evaluationTarget) {
+    historyEntry.evaluationTarget = evaluationTarget;
+  }
+  discussionState.history.push(historyEntry);
 
-  // Remove from pending
-  discussionState.pendingResponses.delete(aiType);
+  // Handle sequential evaluations for 3 participants
+  if (discussionState.pendingEvaluations) {
+    const evalState = discussionState.pendingEvaluations.get(aiType);
+    if (evalState) {
+      // Mark current evaluation as complete
+      if (evalState.remaining.length > 0) {
+        const completedTarget = evalState.remaining[0];
+        evalState.evaluated.add(completedTarget);
+        evalState.remaining.shift(); // Remove first element
+      }
+
+      // Check if there are more evaluations remaining for this participant
+      if (evalState.remaining.length > 0) {
+        // Send next evaluation prompt
+        const nextTarget = evalState.remaining[0];
+        
+        // Get previous round response for the next target
+        const prevRound = discussionState.currentRound - 1;
+        const targetResponse = discussionState.history.find(
+          h => h.round === prevRound && h.ai === nextTarget
+        )?.content;
+
+        if (targetResponse) {
+          const msg = `Here is ${capitalize(nextTarget)}'s response to the topic "${discussionState.topic}":
+
+<${nextTarget}_response>
+${targetResponse}
+</${nextTarget}_response>
+
+Please evaluate this response. What do you agree with? What do you disagree with? What would you add or change?`;
+
+          log(`Discussion: ${capitalize(aiType)} evaluating ${capitalize(nextTarget)} (${evalState.evaluated.size + 1}/2)`, 'info');
+          await sendToAI(aiType, msg);
+          
+          // Update status message
+          const statusParts = [];
+          for (const [participant, state] of discussionState.pendingEvaluations.entries()) {
+            if (state.remaining.length > 0) {
+              const target = state.remaining[0];
+              const progress = state.evaluated.size + 1;
+              statusParts.push(`${capitalize(participant)} evaluating ${capitalize(target)} (${progress}/2)`);
+            } else if (discussionState.pendingResponses.has(participant)) {
+              statusParts.push(`${capitalize(participant)} completing...`);
+            }
+          }
+          if (statusParts.length > 0) {
+            updateDiscussionStatus('waiting', `Sequential evaluation: ${statusParts.join(', ')}...`);
+          }
+          
+          // Don't remove from pendingResponses yet - still waiting for next response
+          return;
+        } else {
+          log(`Could not find previous round response for ${nextTarget}`, 'error');
+        }
+      } else {
+        // All evaluations complete for this participant
+        log(`Discussion: ${capitalize(aiType)} completed all evaluations (Round ${discussionState.currentRound})`, 'success');
+        discussionState.pendingResponses.delete(aiType);
+      }
+    }
+  } else {
+    // Not a sequential evaluation round - remove from pending as before
+    discussionState.pendingResponses.delete(aiType);
+  }
 
   log(`Discussion: ${aiType} replied (Round ${discussionState.currentRound})`, 'success');
 
@@ -633,14 +817,38 @@ function handleDiscussionResponse(aiType, content) {
   if (discussionState.pendingResponses.size === 0) {
     onRoundComplete();
   } else {
-    const remaining = Array.from(discussionState.pendingResponses).join(', ');
-    updateDiscussionStatus('waiting', `Waiting for ${remaining}...`);
+    const remaining = Array.from(discussionState.pendingResponses).map(capitalize).join(', ');
+    if (discussionState.pendingEvaluations) {
+      // Update status for sequential evaluation
+      const statusParts = [];
+      for (const [participant, state] of discussionState.pendingEvaluations.entries()) {
+        if (discussionState.pendingResponses.has(participant)) {
+          if (state.remaining.length > 0) {
+            const target = state.remaining[0];
+            const progress = state.evaluated.size + 1;
+            statusParts.push(`${capitalize(participant)} evaluating ${capitalize(target)} (${progress}/2)`);
+          } else {
+            statusParts.push(`${capitalize(participant)} completing...`);
+          }
+        }
+      }
+      if (statusParts.length > 0) {
+        updateDiscussionStatus('waiting', `Sequential evaluation: ${statusParts.join(', ')}...`);
+      } else {
+        updateDiscussionStatus('waiting', `Waiting for ${remaining}...`);
+      }
+    } else {
+      updateDiscussionStatus('waiting', `Waiting for ${remaining}...`);
+    }
   }
 }
 
 function onRoundComplete() {
   log(`Round ${discussionState.currentRound} completed`, 'success');
   updateDiscussionStatus('ready', `Round ${discussionState.currentRound} completed, ready for next round`);
+
+  // Clear pendingEvaluations when round completes
+  discussionState.pendingEvaluations = null;
 
   // Enable next round button
   document.getElementById('next-round-btn').disabled = false;
@@ -650,7 +858,7 @@ function onRoundComplete() {
 
 async function nextRound() {
   discussionState.currentRound++;
-  const [ai1, ai2] = discussionState.participants;
+  const participants = discussionState.participants;
 
   // Update UI
   document.getElementById('round-badge').textContent = `Round ${discussionState.currentRound}`;
@@ -660,50 +868,112 @@ async function nextRound() {
 
   // Get previous round responses
   const prevRound = discussionState.currentRound - 1;
-  const ai1Response = discussionState.history.find(
-    h => h.round === prevRound && h.ai === ai1
-  )?.content;
-  const ai2Response = discussionState.history.find(
-    h => h.round === prevRound && h.ai === ai2
-  )?.content;
-
-  if (!ai1Response || !ai2Response) {
-    log('Missing responses from previous round', 'error');
-    return;
+  const prevRoundResponses = {};
+  for (const ai of participants) {
+    const response = discussionState.history.find(
+      h => h.round === prevRound && h.ai === ai
+    )?.content;
+    if (!response) {
+      log('Missing responses from previous round', 'error');
+      return;
+    }
+    prevRoundResponses[ai] = response;
   }
 
-  // Set pending responses
-  discussionState.pendingResponses = new Set([ai1, ai2]);
-  discussionState.roundType = 'cross-eval';
+  // Handle 2 participants (backward compatible)
+  if (participants.length === 2) {
+    const [ai1, ai2] = participants;
 
-  updateDiscussionStatus('waiting', `Cross-evaluation: ${ai1} evaluating ${ai2}, ${ai2} evaluating ${ai1}...`);
+    // Set pending responses
+    discussionState.pendingResponses = new Set([ai1, ai2]);
+    discussionState.roundType = 'cross-eval';
+    discussionState.pendingEvaluations = null;
 
-  log(`Round ${discussionState.currentRound}: Cross-evaluation started`);
+    updateDiscussionStatus('waiting', `Cross-evaluation: ${capitalize(ai1)} evaluating ${capitalize(ai2)}, ${capitalize(ai2)} evaluating ${capitalize(ai1)}...`);
 
-  // Send cross-evaluation requests
-  // AI1 evaluates AI2's response
-  const msg1 = `Here is ${capitalize(ai2)}'s response to the topic "${discussionState.topic}":
+    log(`Round ${discussionState.currentRound}: Cross-evaluation started`);
+
+    // Send cross-evaluation requests
+    // AI1 evaluates AI2's response
+    const msg1 = `Here is ${capitalize(ai2)}'s response to the topic "${discussionState.topic}":
 
 <${ai2}_response>
-${ai2Response}
+${prevRoundResponses[ai2]}
 </${ai2}_response>
 
 Please evaluate this response. What do you agree with? What do you disagree with? What would you add or change?`;
 
-  // AI2 evaluates AI1's response
-  const msg2 = `Here is ${capitalize(ai1)}'s response to the topic "${discussionState.topic}":
+    // AI2 evaluates AI1's response
+    const msg2 = `Here is ${capitalize(ai1)}'s response to the topic "${discussionState.topic}":
 
 <${ai1}_response>
-${ai1Response}
+${prevRoundResponses[ai1]}
 </${ai1}_response>
 
 Please evaluate this response. What do you agree with? What do you disagree with? What would you add or change?`;
 
-  await sendToAI(ai1, msg1);
-  await sendToAI(ai2, msg2);
+    await sendToAI(ai1, msg1);
+    await sendToAI(ai2, msg2);
 
-  // Restart response polling for this round
-  startResponsePolling();
+    // Restart response polling for this round
+    startResponsePolling();
+    return;
+  }
+
+  // Handle 3 participants (sequential evaluation)
+  if (participants.length === 3) {
+    const [ai1, ai2, ai3] = participants;
+
+    // Initialize pendingEvaluations map
+    discussionState.pendingEvaluations = new Map();
+    for (const ai of participants) {
+      const otherParticipants = participants.filter(p => p !== ai);
+      discussionState.pendingEvaluations.set(ai, {
+        evaluated: new Set(),
+        remaining: otherParticipants
+      });
+    }
+
+    // Set pending responses (all 3 participants)
+    discussionState.pendingResponses = new Set(participants);
+    discussionState.roundType = 'cross-eval';
+
+    // Send first evaluation prompt to each participant
+    for (const evaluator of participants) {
+      const evalState = discussionState.pendingEvaluations.get(evaluator);
+      if (evalState && evalState.remaining.length > 0) {
+        const firstTarget = evalState.remaining[0];
+        const targetResponse = prevRoundResponses[firstTarget];
+
+        const msg = `Here is ${capitalize(firstTarget)}'s response to the topic "${discussionState.topic}":
+
+<${firstTarget}_response>
+${targetResponse}
+</${firstTarget}_response>
+
+Please evaluate this response. What do you agree with? What do you disagree with? What would you add or change?`;
+
+        await sendToAI(evaluator, msg);
+      }
+    }
+
+    // Update status message
+    const statusParts = participants.map(ai => {
+      const evalState = discussionState.pendingEvaluations.get(ai);
+      const target = evalState?.remaining[0];
+      return `${capitalize(ai)} evaluating ${capitalize(target)}`;
+    });
+    updateDiscussionStatus('waiting', `Sequential evaluation: ${statusParts.join(', ')}...`);
+
+    log(`Round ${discussionState.currentRound}: Sequential evaluation started (3 participants)`);
+
+    // Restart response polling for this round
+    startResponsePolling();
+    return;
+  }
+
+  // Should not reach here, but handle gracefully
+  log('Unsupported number of participants', 'error');
 }
 
 async function handleInterject() {
@@ -1653,7 +1923,8 @@ function resetDiscussion() {
     currentRound: 0,
     history: [],
     pendingResponses: new Set(),
-    roundType: null
+    roundType: null,
+    pendingEvaluations: null
   };
 
   // Stop response polling
@@ -1666,7 +1937,7 @@ function resetDiscussion() {
   document.getElementById('discussion-setup').classList.remove('hidden');
   document.getElementById('discussion-active').classList.add('hidden');
   document.getElementById('discussion-summary').classList.add('hidden');
-  document.getElementById('discussion-topic').value = '';
+  document.getElementById('discussion-topic').value = 'Latest important news from the past 1 week related to new features of advanced AI tools included but not limited to Gemini, Claude, Chatgpt, Grok, Cursor, Antigravity, NotebookLm, Notion AI, Perplexity, Cursor, Copilot, Deepseek, Qwen, Midjourney, Stable Diffusion, Manus, Llama, Devin, Comet and Replit.';
   document.getElementById('next-round-btn').disabled = true;
   document.getElementById('generate-summary-btn').disabled = true;
   document.getElementById('show-discussion-btn').disabled = true;
@@ -1694,6 +1965,78 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+async function findExistingAITab(aiType) {
+  const patterns = {
+    claude: ['claude.ai'],
+    chatgpt: ['chat.openai.com', 'chatgpt.com'],
+    gemini: ['gemini.google.com']
+  };
+
+  const urlPatterns = patterns[aiType];
+  if (!urlPatterns) return null;
+
+  try {
+    const tabs = await chrome.tabs.query({});
+    for (const tab of tabs) {
+      if (tab.url && urlPatterns.some(pattern => tab.url.includes(pattern))) {
+        return tab;
+      }
+    }
+  } catch (err) {
+    console.error(`Error finding ${aiType} tab:`, err);
+  }
+  return null;
+}
+
+async function createNewChatsForAll() {
+  const btn = document.getElementById('create-chat-btn');
+  const originalText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Opening chats...';
+
+  try {
+    const aiUrls = {
+      claude: 'https://claude.ai/chat',
+      chatgpt: 'https://chat.openai.com/',
+      gemini: 'https://gemini.google.com/'
+    };
+
+    log('Creating new chats for all participants...', 'info');
+
+    // Check for existing tabs and create new chats
+    for (const [aiType, url] of Object.entries(aiUrls)) {
+      try {
+        const existingTab = await findExistingAITab(aiType);
+        
+        if (existingTab) {
+          // Tab exists - update it to create a new chat
+          try {
+            await chrome.tabs.update(existingTab.id, { url: url, active: true });
+            log(`Created new ${capitalize(aiType)} chat in existing tab`, 'success');
+          } catch (err) {
+            log(`Failed to update ${capitalize(aiType)} tab: ${err.message}`, 'error');
+            // Fallback: create new tab if update fails
+            await chrome.tabs.create({ url: url });
+            log(`Opened new ${capitalize(aiType)} chat tab (fallback)`, 'success');
+          }
+        } else {
+          // No existing tab - create new one
+          await chrome.tabs.create({ url: url });
+          log(`Opened new ${capitalize(aiType)} chat tab`, 'success');
+        }
+        
+        // Small delay between opening tabs to avoid overwhelming the browser
+        await sleep(300);
+      } catch (err) {
+        log(`Failed to open ${capitalize(aiType)} chat: ${err.message}`, 'error');
+      }
+    }
+
+    log('All new chats opened successfully', 'success');
+  } catch (err) {
+    log('Error creating new chats: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  }
 }
