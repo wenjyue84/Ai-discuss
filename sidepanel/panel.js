@@ -41,7 +41,33 @@ document.addEventListener('DOMContentLoaded', () => {
   checkConnectedTabs();
   setupEventListeners();
   setupDiscussionMode();
+  loadVersion();
 });
+
+// Load and display version number
+async function loadVersion() {
+  try {
+    const manifest = chrome.runtime.getManifest();
+    const versionElement = document.getElementById('version-number');
+    if (versionElement && manifest.version) {
+      versionElement.textContent = manifest.version;
+    }
+    
+    // Set first release date (today's date)
+    const releaseDateElement = document.getElementById('release-date');
+    if (releaseDateElement) {
+      const today = new Date();
+      const dateString = today.toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      });
+      releaseDateElement.textContent = dateString;
+    }
+  } catch (error) {
+    console.error('Failed to load version:', error);
+  }
+}
 
 function setupEventListeners() {
   sendBtn.addEventListener('click', handleSend);
@@ -1969,7 +1995,9 @@ async function findExistingAITab(aiType) {
   const patterns = {
     claude: ['claude.ai'],
     chatgpt: ['chat.openai.com', 'chatgpt.com'],
-    gemini: ['gemini.google.com']
+    gemini: ['gemini.google.com'],
+    perplexity: ['perplexity.ai'],
+    grok: ['grok.com']
   };
 
   const urlPatterns = patterns[aiType];
@@ -1998,7 +2026,9 @@ async function createNewChatsForAll() {
     const aiUrls = {
       claude: 'https://claude.ai/chat',
       chatgpt: 'https://chat.openai.com/',
-      gemini: 'https://gemini.google.com/'
+      gemini: 'https://gemini.google.com/',
+      perplexity: 'https://www.perplexity.ai/',
+      grok: 'https://grok.com/'
     };
 
     log('Creating new chats for all participants...', 'info');

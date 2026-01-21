@@ -1196,3 +1196,45 @@ header .subtitle {
   transform: translateY(-2px);
   filter: brightness(1.1);
 }
+
+/* Version Info */
+.version-info {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.version-text {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.version-text #version-number {
+  color: var(--accent-secondary);
+  font-weight: 600;
+  font-family: 'Monaco', 'Consolas', 'SF Mono', monospace;
+}
+
+.release-date-text {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.release-date-text #release-date {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.developer-text {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 400;
+  opacity: 0.8;
+}
